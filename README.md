@@ -19,17 +19,6 @@ First Ticket 프로젝트의 대기열 서비스.
 
 ---
 
-## 📦 주요 의존성
-
-- Spring Web
-- Spring Boot Actuator
-- Spring Cloud Config Client
-- Spring Cloud Netflix Eureka Client
-- Spring Data Redis
-- Spring Validation
-- Lombok
-
----
 
 ## 🚀 로컬 실행
 

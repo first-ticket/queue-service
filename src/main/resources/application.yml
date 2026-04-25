@@ -1,6 +1,8 @@
 spring:
   application:
-    name: queue-service                                # ← 추가
+    name: queue-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   config:
     import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
   cloud:

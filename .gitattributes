@@ -1,0 +1,16 @@
+# 텍스트 파일 기본: LF 정규화
+* text=auto eol=lf
+
+# gradlew는 반드시 LF (Unix 실행 파일)
+gradlew text eol=lf
+
+# Windows 배치 파일
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 바이너리 (변환 금지)
+*.jar binary
+*.class binary
+*.png binary
+*.jpg binary
+*.gif binary

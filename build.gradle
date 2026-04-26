@@ -13,8 +13,26 @@ java {
 	}
 }
 
+def env = [:]
+def envFile = rootProject.file(".env")
+if (envFile.exists()) {
+    envFile.eachLine { line ->
+        if (line && !line.startsWith("#") && line.contains("=")) {
+            def (key, value) = line.split("=", 2)
+            env[key.trim()] = value.trim()
+        }
+    }
+}
+
 repositories {
-	mavenCentral()
+    mavenCentral()
+    maven {
+        url = 'https://maven.pkg.github.com/first-ticket/common'
+        credentials {
+            username = env['GITHUB_USER']
+            password = env['GITHUB_TOKEN']
+        }
+    }
 }
 
 ext {
@@ -28,6 +46,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.cloud:spring-cloud-starter-config'
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'com.first-ticket:common:0.0.2-SNAPSHOT'
+
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'

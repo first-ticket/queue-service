@@ -49,6 +49,11 @@ public class QueueToken {
         IssuedAt issuedAt,
         TokenStatus status
     ) {
+        Objects.requireNonNull(id, "QueueTokenId는 필수입니다");
+        Objects.requireNonNull(userId, "UserId는 필수입니다");
+        Objects.requireNonNull(programId, "ProgramId는 필수입니다");
+        Objects.requireNonNull(issuedAt, "IssuedAt은 필수입니다");
+        Objects.requireNonNull(status, "TokenStatus는 필수입니다");
         return new QueueToken(id, userId, programId, issuedAt, status);
     }
 

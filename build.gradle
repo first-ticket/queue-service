@@ -16,23 +16,32 @@ java {
 def env = [:]
 def envFile = rootProject.file(".env")
 if (envFile.exists()) {
-    envFile.eachLine { line ->
-        if (line && !line.startsWith("#") && line.contains("=")) {
-            def (key, value) = line.split("=", 2)
-            env[key.trim()] = value.trim()
-        }
-    }
+	envFile.eachLine { line ->
+		if (line && !line.startsWith("#") && line.contains("=")) {
+			def (key, value) = line.split("=", 2)
+			env[key.trim()] = value.trim()
+		}
+	}
+}
+
+def githubUser = env['GITHUB_USER'] ?: System.getenv('GITHUB_USER')
+def githubToken = env['GITHUB_TOKEN'] ?: System.getenv('GITHUB_TOKEN')
+
+if (!githubUser || !githubToken) {
+	throw new GradleException(
+			"GitHub 인증 정보가 없습니다. .env 파일 또는 환경변수에 GITHUB_USER, GITHUB_TOKEN을 설정해주세요."
+	)
 }
 
 repositories {
-    mavenCentral()
-    maven {
-        url = 'https://maven.pkg.github.com/first-ticket/common'
-        credentials {
-            username = env['GITHUB_USER']
-            password = env['GITHUB_TOKEN']
-        }
-    }
+	mavenCentral()
+	maven {
+		url = 'https://maven.pkg.github.com/first-ticket/common'
+		credentials {
+			username = githubUser
+			password = githubToken
+		}
+	}
 }
 
 ext {

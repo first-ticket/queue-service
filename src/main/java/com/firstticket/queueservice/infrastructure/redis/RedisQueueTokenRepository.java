@@ -269,6 +269,10 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
      */
     @Override
     public List<QueueToken> findAdmissionCandidates(ProgramId programId, int batchSize) {
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("batchSize는 1 이상이어야 합니다: " + batchSize);
+        }
+
         String programKey = programKey(programId);
 
         // 1단계: Sorted Set에서 앞에서부터 batchSize명의 tokenId 조회

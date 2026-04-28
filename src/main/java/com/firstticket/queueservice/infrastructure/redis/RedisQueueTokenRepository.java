@@ -197,6 +197,13 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         String userProgramKey = userProgramKey(token.getUserId(), token.getProgramId());
         String tokenIdStr = token.getId().asString();
 
+        // 역인덱스 값과 토큰 ID가 일치할 때만 삭제
+        // (다른 토큰이 차지한 경우는 그대로 둠 — race condition 방어)
+        String current = redisTemplate.opsForValue().get(userProgramKey);
+        if (tokenIdStr.equals(current)) {
+            redisTemplate.delete(userProgramKey);
+        }
+
         redisTemplate.execute(new SessionCallback<List<Object>>() {
             @SuppressWarnings({"unchecked"})
             @Override
@@ -208,9 +215,6 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
 
                 // 2. Hash 키 삭제
                 operations.delete(tokenKey);
-
-                // 3. 역인덱스 키 삭제
-                operations.delete(userProgramKey);
 
                 return operations.exec();
             }

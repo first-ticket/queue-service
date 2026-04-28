@@ -260,6 +260,30 @@ class RedisQueueTokenRepositoryTest {
             // enqueue 없이 바로 delete
             repository.delete(token);   // 예외 없어야 함
         }
+
+        @Test
+        @DisplayName("역인덱스가 다른 토큰을 가리키면 역인덱스는 유지된다 (race 방어)")
+        void 역인덱스_compare_and_delete() {
+            UserId userId = UserId.of(UUID.randomUUID());
+            ProgramId programId = ProgramId.of(UUID.randomUUID());
+
+            // 1. tokenA 발급 후 강제 삭제 (Sorted Set, Hash, 역인덱스 모두 사라짐)
+            QueueToken tokenA = QueueToken.issue(userId, programId);
+            repository.enqueue(tokenA);
+
+            // 2. 같은 사용자가 tokenB 로 재진입 (역인덱스 = tokenB)
+            repository.delete(tokenA);
+            QueueToken tokenB = QueueToken.issue(userId, programId);
+            repository.enqueue(tokenB);
+
+            // 3. 늦게 도착한 tokenA 의 delete (race 시뮬)
+            repository.delete(tokenA);
+
+            // 4. tokenB 의 역인덱스는 그대로 — findByUserIdAndProgramId 로 tokenB 조회 가능
+            Optional<QueueToken> found = repository.findByUserIdAndProgramId(userId, programId);
+            assertThat(found).isPresent();
+            assertThat(found.get().getId()).isEqualTo(tokenB.getId());
+        }
     }
 
     @Nested

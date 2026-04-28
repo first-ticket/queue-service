@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 대기 토큰 ID를 표현하는 VO.
+ * 사용자 ID를 표현하는 VO.
  */
 public record UserId(UUID id) {
 

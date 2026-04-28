@@ -19,7 +19,7 @@ public enum TokenStatus {
     /** 입장 승인됨 */
     ADMITTED,
 
-    /** 입장 승인됨 */
+    /** 사용자 또는 시스템에 의해 취소됨 */
     CANCELLED,
 
     /** 시간 만료 */

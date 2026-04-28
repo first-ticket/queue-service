@@ -3,6 +3,9 @@ package com.firstticket.queueservice.domain.vo;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * 프로그램(공연) ID를 표현하는 VO.
+ */
 public record ProgramId(UUID id) {
 
     public ProgramId {
@@ -17,4 +20,7 @@ public record ProgramId(UUID id) {
         return new ProgramId(UUID.fromString(id));
     }
 
+    public String asString() {
+        return id.toString();
+    }
 }

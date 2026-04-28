@@ -12,9 +12,16 @@ import lombok.Getter;
 import java.util.Objects;
 
 /**
- * 1. 대기 토큰은 발급된 시점에 WAITING 상태로 시작한다
- * 2. WAITING 상태에서만 입장 승인(ADMITTED), 취소(CANCELLED), 만료(EXPIRED)로 전이 가능하다
- * 3. ADMITTED, CANCELLED, EXPIRED 는 최종 상태로 더 이상 전이 불가
+ * 대기 토큰 애그리거트 루트.
+ *
+ * <p>한 사용자의 한 프로그램에 대한 대기 상태를 표현한다.
+ * 발급(WAITING) 후 입장 승인(ADMITTED), 취소(CANCELLED), 만료(EXPIRED) 중 하나로 전이된다.
+ *
+ * <p>상태 전이 규칙:
+ * <ul>
+ *   <li>WAITING → ADMITTED, CANCELLED, EXPIRED</li>
+ *   <li>나머지 상태에서는 전이 불가 (최종 상태)</li>
+ * </ul>
  */
 @Getter
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -81,7 +88,9 @@ public class QueueToken {
         this.status = TokenStatus.EXPIRED;
     }
 
-
+    /**
+     * 현재 상태가 WAITING이 아니면 예외를 던진다.
+     */
     private void ensureWaiting() {
         if (status.isTerminal()) {
             throw new InvalidTokenStateException();

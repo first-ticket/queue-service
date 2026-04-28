@@ -3,6 +3,9 @@ package com.firstticket.queueservice.domain.vo;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * 대기 토큰 ID를 표현하는 VO.
+ */
 public record UserId(UUID id) {
 
     public UserId {
@@ -15,5 +18,9 @@ public record UserId(UUID id) {
 
     public static UserId fromString(String id) {
         return new UserId(UUID.fromString(id));
+    }
+
+    public String asString() {
+        return id.toString();
     }
 }

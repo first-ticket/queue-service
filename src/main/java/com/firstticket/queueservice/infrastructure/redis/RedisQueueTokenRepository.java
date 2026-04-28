@@ -10,6 +10,7 @@ import com.firstticket.queueservice.domain.vo.ProgramId;
 import com.firstticket.queueservice.domain.vo.QueueTokenId;
 import com.firstticket.queueservice.domain.vo.UserId;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.SessionCallback;
@@ -35,6 +36,7 @@ import java.util.Set;
  * <p>저장 시 역인덱스(setIfAbsent)와 트랜잭션(MULTI/EXEC)으로 일관성을 보장한다.
  * 자세한 흐름은 {@link #enqueue(QueueToken)} 참고.
  */
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class RedisQueueTokenRepository implements QueueTokenRepository {
@@ -141,8 +143,14 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
             return Optional.empty();
         }
 
-        // Hash 데이터로 QueueToken 객체 만들어서 반환
-        return Optional.of(toQueueToken(id, entries));
+        // 깨진 레코드 자동 정리 향후 도입
+        try {
+            // Hash 데이터로 QueueToken 객체 만들어서 반환
+            return Optional.of(toQueueToken(id, entries));
+        } catch (Exception e) {
+            log.warn("깨진 Hash 레코드 발견. tokenId={}", id.asString(), e);
+            return Optional.empty();
+        }
     }
 
     /**
@@ -158,10 +166,13 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     }
 
     /**
-     * Redis 기반 findById 구현.
+     * Redis 기반 findByUserIdAndProgramId 구현.
      *
-     * <p>Hash 전체 조회 후 도메인 객체로 복원한다.
-     * 토큰이 없으면 빈 Map이 반환되며 (null 아님), Optional.empty()로 처리한다.
+     * <p>2단계 조회:
+     * <ol>
+     *   <li>역인덱스로 tokenId 조회</li>
+     *   <li>tokenId로 토큰 전체 조회 ({@link #findById} 재사용)</li>
+     * </ol>
      */
     @Override
     public Optional<QueueToken> findByUserIdAndProgramId(UserId userId, ProgramId programId) {

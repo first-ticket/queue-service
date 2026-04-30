@@ -43,7 +43,7 @@ public interface QueueTokenRepository {
      * 사용자가 특정 프로그램의 대기 순번을 조회한다.
      * 토큰이 없거나 WAITING 상태가 아니면 Optional.empty()
      */
-    Optional<Long> findRank(UserId userId, ProgramId programId);
+    Optional<Long> findPosition(UserId userId, ProgramId programId);
 
     /**
      * 특정 프로그램의 다음 입장 승인 대상자들을 조회한다 (앞에서 batchSize 명).

@@ -1,6 +1,7 @@
 package com.firstticket.queueservice.domain;
 
 import com.firstticket.queueservice.domain.exception.InvalidTokenStateException;
+import com.firstticket.queueservice.domain.exception.TokenNotFoundException;
 import com.firstticket.queueservice.domain.vo.IssuedAt;
 import com.firstticket.queueservice.domain.vo.ProgramId;
 import com.firstticket.queueservice.domain.vo.QueueTokenId;
@@ -39,7 +40,7 @@ public class QueueToken {
         Objects.requireNonNull(userId, "UserId는 필수입니다");
         Objects.requireNonNull(programId, "ProgramId는 필수입니다");
         return new QueueToken(
-            com.firstticket.queueservice.domain.vo.QueueTokenId.of(),
+            QueueTokenId.of(),
             userId,
             programId,
             IssuedAt.now(),

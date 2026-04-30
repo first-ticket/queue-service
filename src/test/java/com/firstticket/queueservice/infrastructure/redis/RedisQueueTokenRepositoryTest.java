@@ -177,7 +177,7 @@ class RedisQueueTokenRepositoryTest {
             QueueToken token = QueueToken.issue(userId, programId);
             repository.enqueue(token);
 
-            Optional<Long> rank = repository.findRank(userId, programId);
+            Optional<Long> rank = repository.findPosition(userId, programId);
 
             assertThat(rank).isPresent();
             assertThat(rank.get()).isEqualTo(1L);
@@ -198,7 +198,7 @@ class RedisQueueTokenRepositoryTest {
             QueueToken second = QueueToken.issue(secondUser, programId);
             repository.enqueue(second);
 
-            Optional<Long> rank = repository.findRank(secondUser, programId);
+            Optional<Long> rank = repository.findPosition(secondUser, programId);
 
             assertThat(rank).isPresent();
             assertThat(rank.get()).isEqualTo(2L);
@@ -207,7 +207,7 @@ class RedisQueueTokenRepositoryTest {
         @Test
         @DisplayName("미진입 사용자는 빈 Optional 반환")
         void 미진입_사용자() {
-            Optional<Long> rank = repository.findRank(
+            Optional<Long> rank = repository.findPosition(
                 UserId.of(UUID.randomUUID()),
                 ProgramId.of(UUID.randomUUID())
             );
@@ -231,7 +231,7 @@ class RedisQueueTokenRepositoryTest {
             assertThat(repository.findById(token.getId())).isEmpty();
             assertThat(repository.findByUserIdAndProgramId(
                 token.getUserId(), token.getProgramId())).isEmpty();
-            assertThat(repository.findRank(
+            assertThat(repository.findPosition(
                 token.getUserId(), token.getProgramId())).isEmpty();
         }
 

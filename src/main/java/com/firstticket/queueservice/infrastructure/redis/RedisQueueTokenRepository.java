@@ -233,7 +233,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     }
 
     /**
-     * Redis 기반 findRank 구현.
+     * Redis 기반 findPosition 구현.
      *
      * <p>2단계 조회:
      * <ol>
@@ -244,7 +244,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
      * <p>Redis ZRANK는 0-based이므로 사용자에게 보여줄 1-based로 변환한다.
      */
     @Override
-    public Optional<Long> findRank(UserId userId, ProgramId programId) {
+    public Optional<Long> findPosition(UserId userId, ProgramId programId) {
         String userProgramKey = userProgramKey(userId, programId);
 
         // 1단계: 역인덱스로 tokenId 조회

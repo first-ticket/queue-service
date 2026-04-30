@@ -1,6 +1,7 @@
 package com.firstticket.queueservice.domain;
 
 import com.firstticket.queueservice.domain.exception.InvalidTokenStateException;
+import com.firstticket.queueservice.domain.exception.TokenNotFoundException;
 import com.firstticket.queueservice.domain.vo.IssuedAt;
 import com.firstticket.queueservice.domain.vo.ProgramId;
 import com.firstticket.queueservice.domain.vo.QueueTokenId;
@@ -39,7 +40,7 @@ public class QueueToken {
         Objects.requireNonNull(userId, "UserId는 필수입니다");
         Objects.requireNonNull(programId, "ProgramId는 필수입니다");
         return new QueueToken(
-            com.firstticket.queueservice.domain.vo.QueueTokenId.of(),
+            QueueTokenId.of(),
             userId,
             programId,
             IssuedAt.now(),
@@ -86,6 +87,19 @@ public class QueueToken {
     public void expire() {
         ensureWaiting();
         this.status = TokenStatus.EXPIRED;
+    }
+
+    /**
+     * 토큰의 소유자가 주어진 사용자인지 검증한다.
+     *
+     * <p>본인 소유가 아니면 {@link TokenNotFoundException} 을 던진다.
+     * "권한 없음" 대신 "토큰 없음" 으로 통일하여, 토큰의 존재 여부 정보 누출을 방지한다.
+     */
+    public void verifyOwner(UserId userId) {
+        Objects.requireNonNull(userId, "UserId는 필수입니다");
+        if (this.userId.equals(userId)) {
+            throw new TokenNotFoundException();
+        }
     }
 
     /**

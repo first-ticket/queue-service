@@ -289,3 +289,6 @@ gradle-app.setting
 .env
 .env.*
 !.env.example
+
+# REST Docs 빌드 결과
+src/main/resources/static/docs/

@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.13'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.asciidoctor.jvm.convert' version '3.3.2'
 }
 
 group = 'com.first-ticket'
@@ -11,6 +12,10 @@ java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)
 	}
+}
+
+configurations {
+	asciidoctorExt
 }
 
 def env = [:]
@@ -45,6 +50,7 @@ repositories {
 }
 
 ext {
+	set('snippetsDir', file("build/generated-snippets"))
 	set('springCloudVersion', "2025.0.2")
 }
 
@@ -61,6 +67,8 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
+	asciidoctorExt 'org.springframework.restdocs:spring-restdocs-asciidoctor'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
@@ -73,5 +81,36 @@ dependencyManagement {
 }
 
 tasks.named('test') {
+	outputs.dir snippetsDir
 	useJUnitPlatform()
+}
+
+asciidoctor {
+	inputs.dir snippetsDir
+	dependsOn test
+	configurations 'asciidoctorExt'
+	baseDirFollowsSourceFile()
+}
+
+tasks.named('asciidoctor') {
+	doFirst {
+		delete file('src/main/resources/static/docs')
+	}
+}
+
+tasks.register('copyDocument', Copy) { // 생성된 html 파일을 옮긴다
+	dependsOn asciidoctor // Gradle의 asciidoctor Task 이후 수행
+	from layout.buildDirectory.dir("docs/asciidoc")
+	into layout.projectDirectory.dir("src/main/resources/static/docs")
+}
+
+tasks.named('build') {
+	dependsOn copyDocument
+}
+
+bootJar {
+	dependsOn asciidoctor
+	from(layout.buildDirectory.dir("docs/asciidoc")) {
+		into 'static/docs'
+	}
 }

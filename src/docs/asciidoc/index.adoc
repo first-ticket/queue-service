@@ -1,0 +1,81 @@
+= 대기열 API 문서
+:doctype: book
+:icons: font
+:source-highlighter: highlightjs
+:toc: left
+:toclevels: 3
+:sectlinks:
+
+== 개요
+
+대기열 진입 / 조회 / 취소 API.
+
+=== 인증
+
+모든 API 는 Gateway 가 검증한 `X-User-Id` 헤더를 사용한다.
+
+=== 응답 형식
+
+성공 / 실패 모두 `ApiResponse<T>` 형식으로 응답한다.
+
+[source,json]
+----
+{
+  "success": true,
+  "code": "QUEUE_TOKEN_ISSUED",
+  "message": "대기 토큰이 발급되었습니다",
+  "timestamp": "2026-04-30T12:00:00",
+  "data": {
+    "tokenId": "...",
+    "status": "WAITING",
+    "issuedAt": "...",
+    "position": 50
+  }
+}
+----
+
+== 공통 에러 응답
+
+=== 인증 실패 (401)
+
+`X-User-Id` 헤더가 없거나 형식이 잘못된 경우 발생한다.
+
+include::{snippets}/queue-token-unauthorized/http-response.adoc[]
+include::{snippets}/queue-token-unauthorized/response-fields.adoc[]
+
+== 대기열 진입
+
+operation::queue-token-issue[snippets='http-request,path-parameters,request-headers,http-response,response-fields']
+
+== 대기 정보 조회
+
+operation::queue-token-get[snippets='http-request,path-parameters,request-headers,http-response,response-fields']
+
+=== 에러 응답
+
+==== 토큰 없음 (404)
+
+해당 사용자의 토큰이 없을 때 발생한다.
+
+include::{snippets}/queue-token-get-not-found/http-response.adoc[]
+include::{snippets}/queue-token-get-not-found/response-fields.adoc[]
+
+== 대기 취소
+
+operation::queue-token-cancel[snippets='http-request,path-parameters,request-headers,http-response']
+
+=== 에러 응답
+
+==== 토큰 없음 (404)
+
+해당 사용자의 토큰이 없을 때 발생한다.
+
+include::{snippets}/queue-token-cancel-not-found/http-response.adoc[]
+include::{snippets}/queue-token-cancel-not-found/response-fields.adoc[]
+
+==== 취소 불가 상태 (400)
+
+WAITING 이 아닌 상태 (예: ADMITTED) 에서 취소를 시도할 때 발생한다.
+
+include::{snippets}/queue-token-cancel-invalid-state/http-response.adoc[]
+include::{snippets}/queue-token-cancel-invalid-state/response-fields.adoc[]

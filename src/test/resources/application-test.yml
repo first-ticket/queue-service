@@ -13,3 +13,8 @@ queue:
   token:
     waiting-ttl: PT30M
     admission-batch-size: 100
+
+  jwt:
+    secret: "test-secret-key-for-jwt-issuance-must-be-at-least-256-bit"
+    entry-token-ttl: PT3M
+

@@ -11,17 +11,12 @@ import com.firstticket.queueservice.domain.vo.QueueTokenId;
 import com.firstticket.queueservice.domain.vo.UserId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.HashOperations;
-import org.springframework.data.redis.core.RedisOperations;
-import org.springframework.data.redis.core.SessionCallback;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.*;
 import org.springframework.stereotype.Repository;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 대기 토큰의 Redis 기반 영속성 구현체.
@@ -52,6 +47,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     private static final String FIELD_PROGRAM_ID = "programId";
     private static final String FIELD_ISSUED_AT = "issuedAt";
     private static final String FIELD_STATUS = "status";
+    private static final String FIELD_ENTRY_TOKEN = "entryToken";
 
     private final StringRedisTemplate redisTemplate;
     private final QueueProperties properties;
@@ -161,8 +157,9 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         ProgramId programId = ProgramId.fromString(entries.get(FIELD_PROGRAM_ID));
         IssuedAt issuedAt = IssuedAt.fromEpochMilli(Long.parseLong(entries.get(FIELD_ISSUED_AT)));
         TokenStatus status = TokenStatus.valueOf(entries.get(FIELD_STATUS));
+        String entryToken = entries.get(FIELD_ENTRY_TOKEN);     // null 가능 (WAITING 상태)
 
-        return QueueToken.restore(id, userId, programId, issuedAt, status);
+        return QueueToken.restore(id, userId, programId, issuedAt, status, entryToken);
     }
 
     /**
@@ -301,6 +298,94 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
             .filter(Optional::isPresent)
             // Optional<QueueToken> → QueueToken
             .map(Optional::get)
+            .toList();
+    }
+
+    /**
+     * Redis 기반 admit 구현.
+     *
+     * <p>2가지 작업을 트랜잭션으로 처리한다:
+     * <ol>
+     *   <li>Sorted Set 에서 토큰 멤버 제거 (큐에서 빠짐 → position 조회 X)</li>
+     *   <li>Hash 의 status / entryToken 업데이트</li>
+     * </ol>
+     *
+     * <p>역인덱스는 유지 — 사용자가 GET 으로 자기 토큰 조회 가능 (status: ADMITTED 응답).
+     */
+    public void admit(QueueToken token) {
+        String programKey = programKey(token.getProgramId());
+        String tokenKey = tokenKey(token.getId());
+        String tokenIdStr = token.getId().asString();
+
+        Map<String, String> updates = Map.of(
+            FIELD_STATUS, token.getStatus().name(),
+            FIELD_ENTRY_TOKEN, token.getEntryToken()
+        );
+
+        redisTemplate.execute(new SessionCallback<List<Object>>() {
+            @SuppressWarnings({"unchecked"})
+            @Override
+            public List<Object> execute(RedisOperations operations) {
+                operations.multi();
+
+                // 1. Sorted Set 에서 멤버 제거 (큐에서 빠짐)
+                operations.opsForZSet().remove(programKey, tokenIdStr);
+
+                // 2. Hash 의 status / entryToken 업데이트
+                operations.opsForHash().putAll(tokenKey, updates);
+
+                return operations.exec();
+            }
+        });
+    }
+
+    /**
+     * Redis 기반 findActiveProgramIds 구현.
+     *
+     * <p>{@code queue:program:*} 패턴으로 SCAN 하여 활성 프로그램 ID 목록을 반환한다.
+     *
+     * <p>SCAN 사용 이유: KEYS 명령은 production 에서 블로킹 발생 위험. SCAN 은 점진적.
+     *
+     * <h3>Future Work</h3>
+     * 본 메서드는 MVP 의 가정 (큐 존재 = 활성 프로그램) 을 따른다.
+     * <p>program-service 와 Kafka 이벤트 통합 후엔:
+     * <ul>
+     *   <li>{@code program.opened} 이벤트 → Redis Set 의 활성 프로그램 추가</li>
+     *   <li>{@code program.closed} 이벤트 → Set 에서 제거</li>
+     *   <li>본 메서드는 Redis Set 직접 조회 (SCAN 불필요)</li>
+     * </ul>
+     */
+    public List<ProgramId> findActiveProgramIds() {
+        String pattern = QUEUE_KEY_PREFIX + PROGRAM_KEY_PREFIX + "*";
+
+        // 1. SCAN 으로 모든 큐 키 수집
+        Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
+            Set<String> result = new HashSet<>();
+            ScanOptions options = ScanOptions.scanOptions()
+                .match(pattern)     // queue:program:* 매칭
+                .count(100)         // 한 번에 100 개씩 점진적 조회
+                .build();
+
+            // try-with-resources 로 cursor 자동 정리
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    // Redis 는 byte[] 반환 → UTF-8 문자열로 변환
+                    result.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                }
+            }
+            return result;
+        });
+
+        if (keys == null || keys.isEmpty()) {
+            return List.of();
+        }
+
+        // 2. 키에서 UUID 추출하여 ProgramId 로 변환
+        // 예: "queue:program:abc-123" → "abc-123" → ProgramId.of("abc-123")
+        String prefix = QUEUE_KEY_PREFIX + PROGRAM_KEY_PREFIX;
+        return keys.stream()
+            .map(key -> key.substring(prefix.length()))
+            .map(ProgramId::fromString)
             .toList();
     }
 

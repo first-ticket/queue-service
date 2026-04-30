@@ -90,19 +90,6 @@ public class QueueToken {
     }
 
     /**
-     * 토큰의 소유자가 주어진 사용자인지 검증한다.
-     *
-     * <p>본인 소유가 아니면 {@link TokenNotFoundException} 을 던진다.
-     * "권한 없음" 대신 "토큰 없음" 으로 통일하여, 토큰의 존재 여부 정보 누출을 방지한다.
-     */
-    public void verifyOwner(UserId userId) {
-        Objects.requireNonNull(userId, "UserId는 필수입니다");
-        if (this.userId.equals(userId)) {
-            throw new TokenNotFoundException();
-        }
-    }
-
-    /**
      * 현재 상태가 WAITING이 아니면 예외를 던진다.
      */
     private void ensureWaiting() {

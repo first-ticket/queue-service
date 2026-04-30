@@ -7,6 +7,7 @@ import com.firstticket.common.web.AuthContext;
 import com.firstticket.queueservice.application.QueueTokenService;
 import com.firstticket.queueservice.application.dto.QueueTokenResult;
 import com.firstticket.queueservice.domain.QueueToken;
+import com.firstticket.queueservice.domain.exception.DuplicateTokenException;
 import com.firstticket.queueservice.domain.exception.InvalidTokenStateException;
 import com.firstticket.queueservice.domain.exception.TokenNotFoundException;
 import com.firstticket.queueservice.domain.vo.ProgramId;
@@ -45,6 +46,20 @@ import static org.springframework.restdocs.request.RequestDocumentation.paramete
 import static org.springframework.restdocs.request.RequestDocumentation.pathParameters;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * 대기열 API 통합 테스트.
+ *
+ * <p>WebMvcTest 슬라이스로 Controller 만 로드하고 Service 는 mock 한다.
+ * 테스트 통과 시 REST Docs snippet 이 자동 생성되며,
+ * AsciiDoc 빌드를 거쳐 build/docs/asciidoc/index.html 로 문서화된다.
+ *
+ * <p>주요 검증:
+ * <ul>
+ *   <li>HTTP 메서드별 정상 동작 (POST 201, GET 200, DELETE 204)</li>
+ *   <li>인증 헤더 (X-User-Id) 누락 시 401</li>
+ *   <li>도메인 예외 → HTTP status 매핑 (404, 400, 409)</li>
+ * </ul>
+ */
 @WebMvcTest(QueueTokenController.class)
 @AutoConfigureRestDocs
 @ActiveProfiles("test")
@@ -197,6 +212,37 @@ class QueueTokenControllerTest {
                     responseFields(
                         fieldWithPath("success").description("요청 성공 여부 (false)"),
                         fieldWithPath("code").description("에러 코드 (UNAUTHORIZED)"),
+                        fieldWithPath("message").description("에러 메시지"),
+                        fieldWithPath("timestamp").description("응답 시각")
+                    )
+                ));
+        }
+    }
+
+    @Test
+    @DisplayName("동시 진입 시 race — 409 Conflict")
+    void 중복_진입_409() throws Exception {
+        // given
+        UUID userId = UUID.randomUUID();
+        UUID programId = UUID.randomUUID();
+
+        when(queueTokenService.issueToken(any())).thenThrow(new DuplicateTokenException());
+
+        try (MockedStatic<AuthContext> mocked = mockStatic(AuthContext.class)) {
+            mocked.when(AuthContext::getUserId).thenReturn(userId);
+
+            mockMvc.perform(post("/api/v1/queues/programs/{programId}", programId)
+                    .header("X-User-Id", userId.toString()))
+                .andExpect(status().isConflict())
+                .andDo(document("queue-token-duplicate",
+                    preprocessRequest(
+                        prettyPrint(),
+                        modifyHeaders().remove("Content-Type")
+                    ),
+                    preprocessResponse(prettyPrint()),
+                    responseFields(
+                        fieldWithPath("success").description("요청 성공 여부 (false)"),
+                        fieldWithPath("code").description("에러 코드 (DUPLICATE_TOKEN)"),
                         fieldWithPath("message").description("에러 메시지"),
                         fieldWithPath("timestamp").description("응답 시각")
                     )

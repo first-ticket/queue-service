@@ -47,6 +47,15 @@ include::{snippets}/queue-token-unauthorized/response-fields.adoc[]
 
 operation::queue-token-issue[snippets='http-request,path-parameters,request-headers,http-response,response-fields']
 
+=== 에러 응답
+
+==== 동시 진입 race (409)
+
+동시 요청으로 race condition 발생 시 (드문 케이스). v0.2.0 의 Lua Script 통합으로 근본 해결 예정.
+
+include::{snippets}/queue-token-duplicate/http-response.adoc[]
+include::{snippets}/queue-token-duplicate/response-fields.adoc[]
+
 == 대기 정보 조회
 
 operation::queue-token-get[snippets='http-request,path-parameters,request-headers,http-response,response-fields']

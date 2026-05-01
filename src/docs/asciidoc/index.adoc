@@ -73,7 +73,7 @@ include::{snippets}/queue-token-get-not-found/response-fields.adoc[]
 
 == 대기 취소
 
-operation::queue-token-cancel[snippets='http-request,path-parameters,request-headers,http-response']
+operation::queue-token-cancel[snippets='http-request,path-parameters,request-headers,http-response,response-fields']
 
 === 에러 응답
 

@@ -64,7 +64,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>주요 검증:
  * <ul>
- *   <li>HTTP 메서드별 정상 동작 (POST 201, GET 200, DELETE 204)</li>
+ *   <li>HTTP 메서드별 정상 동작 (POST 201, GET 200, DELETE 200)</li>
  *   <li>인증 실패 시 401</li>
  *   <li>도메인 예외 → HTTP status 매핑 (404, 400, 409)</li>
  * </ul>
@@ -188,7 +188,7 @@ class QueueTokenControllerTest {
             // when & then
             mockMvc.perform(delete("/api/v1/queues/programs/{programId}", programId)
                             .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
-                    .andExpect(status().isNoContent())
+                    .andExpect(status().isOk())
                     .andDo(document("queue-token-cancel",
                             preprocessRequest(prettyPrint()),
                             preprocessResponse(prettyPrint()),
@@ -198,6 +198,12 @@ class QueueTokenControllerTest {
                             requestHeaders(
                                     headerWithName("Authorization")
                                             .description("Bearer access token (Keycloak 발급)")
+                            ),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부"),
+                                    fieldWithPath("code").description("응답 코드 (QUEUE_TOKEN_CANCELLED)"),
+                                    fieldWithPath("message").description("응답 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각")
                             )
                     ));
         }

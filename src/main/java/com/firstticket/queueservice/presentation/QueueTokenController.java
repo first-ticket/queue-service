@@ -63,7 +63,7 @@ public class QueueTokenController {
     /**
      * 대기 취소.
      *
-     * @return 204 No Content
+     * @return 200 OK
      */
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> cancelToken(

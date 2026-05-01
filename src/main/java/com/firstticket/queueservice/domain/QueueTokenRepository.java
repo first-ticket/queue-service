@@ -50,4 +50,13 @@ public interface QueueTokenRepository {
      */
     List<QueueToken> findAdmissionCandidates(ProgramId programId, int batchSize);
 
+    /**
+     * 입장 승인된 토큰의 상태를 업데이트한다.
+     */
+    void admit(QueueToken token);
+
+    /**
+     * 현재 큐가 존재하는 모든 프로그램 ID 를 조회한다.
+     */
+    List<ProgramId> findActiveProgramIds();
 }

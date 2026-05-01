@@ -336,4 +336,47 @@ class QueueTokenControllerTest {
                 ));
         }
     }
+
+    @Test
+    @DisplayName("ADMITTED 상태 토큰 조회 시 entryToken 응답에 포함")
+    void ADMITTED_조회_entryToken_포함() throws Exception {
+        // given
+        UUID userId = UUID.randomUUID();
+        UUID programId = UUID.randomUUID();
+        QueueToken token = QueueToken.issue(UserId.of(userId), ProgramId.of(programId));
+        String entryToken = "eyJhbGc.dummy.jwt";
+        token.admit(entryToken);
+        QueueTokenResult result = QueueTokenResult.of(token, null);   // position null
+
+        when(queueTokenService.getToken(any())).thenReturn(result);
+
+        try (MockedStatic<AuthContext> mocked = mockStatic(AuthContext.class)) {
+            mocked.when(AuthContext::getUserId).thenReturn(userId);
+
+            // when & then
+            mockMvc.perform(get("/api/v1/queues/programs/{programId}", programId)
+                    .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andDo(document("queue-token-get-admitted",
+                    preprocessRequest(prettyPrint()),
+                    preprocessResponse(prettyPrint()),
+                    pathParameters(
+                        parameterWithName("programId").description("프로그램 ID")
+                    ),
+                    requestHeaders(
+                        headerWithName("X-User-Id").description("Gateway 가 주입한 사용자 ID")
+                    ),
+                    responseFields(
+                        fieldWithPath("success").description("요청 성공 여부"),
+                        fieldWithPath("code").description("응답 코드"),
+                        fieldWithPath("message").description("응답 메시지"),
+                        fieldWithPath("timestamp").description("응답 시각"),
+                        fieldWithPath("data.tokenId").description("토큰 ID"),
+                        fieldWithPath("data.status").description("토큰 상태 (ADMITTED)"),
+                        fieldWithPath("data.issuedAt").description("발급 시각"),
+                        fieldWithPath("data.entryToken").description("입장 토큰 (JWT) — ADMITTED 상태일 때만 포함")
+                    )
+                ));
+        }
+    }
 }

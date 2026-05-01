@@ -32,6 +32,7 @@ public class QueueToken {
     private final ProgramId programId;
     private final IssuedAt issuedAt;
     private TokenStatus status;
+    private String entryToken;
 
     /**
      * 새로운 대기 토큰을 발급한다.
@@ -44,7 +45,9 @@ public class QueueToken {
             userId,
             programId,
             IssuedAt.now(),
-            TokenStatus.WAITING);
+            TokenStatus.WAITING,
+            null    // entryToken: 발급 시점엔 없음, admit 시 부여
+        );
     }
 
     /**
@@ -55,22 +58,24 @@ public class QueueToken {
         UserId userId,
         ProgramId programId,
         IssuedAt issuedAt,
-        TokenStatus status
+        TokenStatus status,
+        String entryToken
     ) {
         Objects.requireNonNull(id, "QueueTokenId는 필수입니다");
         Objects.requireNonNull(userId, "UserId는 필수입니다");
         Objects.requireNonNull(programId, "ProgramId는 필수입니다");
         Objects.requireNonNull(issuedAt, "IssuedAt은 필수입니다");
         Objects.requireNonNull(status, "TokenStatus는 필수입니다");
-        return new QueueToken(id, userId, programId, issuedAt, status);
+        return new QueueToken(id, userId, programId, issuedAt, status, entryToken);
     }
 
     /**
      * 입장을 승인한다 (WAITING -> ADMITTED)
      */
-    public void admit() {
+    public void admit(String entryToken) {
         ensureWaiting();
         this.status = TokenStatus.ADMITTED;
+        this.entryToken = entryToken;
     }
 
     /**

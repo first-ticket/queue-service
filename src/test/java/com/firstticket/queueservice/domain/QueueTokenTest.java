@@ -15,6 +15,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class QueueTokenTest {
 
+    private static final String DUMMY_ENTRY_TOKEN = "dummy-entry-token";
+
     private final UserId userId = UserId.of(UUID.randomUUID());
     private final ProgramId programId = ProgramId.of(UUID.randomUUID());
 
@@ -28,6 +30,14 @@ class QueueTokenTest {
             QueueToken token = QueueToken.issue(userId, programId);
 
             assertThat(token.getStatus()).isEqualTo(TokenStatus.WAITING);
+        }
+
+        @Test
+        @DisplayName("발급 시 entryToken은 null 이다")
+        void 발급_시_entryToken_null() {
+            QueueToken token = QueueToken.issue(userId, programId);
+
+            assertThat(token.getEntryToken()).isNull();
         }
 
         @Test
@@ -51,14 +61,14 @@ class QueueTokenTest {
         @DisplayName("UserId가 null이면 예외가 발생한다")
         void userId_null_예외() {
             assertThatThrownBy(() -> QueueToken.issue(null, programId))
-                .isInstanceOf(NullPointerException.class);
+                    .isInstanceOf(NullPointerException.class);
         }
 
         @Test
         @DisplayName("ProgramId가 null이면 예외가 발생한다")
         void programId_null_예외() {
             assertThatThrownBy(() -> QueueToken.issue(userId, null))
-                .isInstanceOf(NullPointerException.class);
+                    .isInstanceOf(NullPointerException.class);
         }
     }
 
@@ -71,21 +81,31 @@ class QueueTokenTest {
         void waiting에서_admit_성공() {
             QueueToken token = QueueToken.issue(userId, programId);
 
-            token.admit();
+            token.admit(DUMMY_ENTRY_TOKEN);
 
             assertThat(token.getStatus()).isEqualTo(TokenStatus.ADMITTED);
+        }
+
+        @Test
+        @DisplayName("admit 시 entryToken이 저장된다")
+        void admit_시_entryToken_저장() {
+            QueueToken token = QueueToken.issue(userId, programId);
+
+            token.admit(DUMMY_ENTRY_TOKEN);
+
+            assertThat(token.getEntryToken()).isEqualTo(DUMMY_ENTRY_TOKEN);
         }
 
         @Test
         @DisplayName("이미 ADMITTED 상태에서 admit 시 예외가 발생한다")
         void admitted에서_admit_시_예외() {
             QueueToken token = QueueToken.issue(userId, programId);
-            token.admit();
+            token.admit(DUMMY_ENTRY_TOKEN);
 
-            assertThatThrownBy(token::admit)
-                .isInstanceOf(InvalidTokenStateException.class)
-                .extracting("errorCode")
-                .isEqualTo(QueueErrorCode.INVALID_TOKEN_STATE);
+            assertThatThrownBy(() -> token.admit(DUMMY_ENTRY_TOKEN))
+                    .isInstanceOf(InvalidTokenStateException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(QueueErrorCode.INVALID_TOKEN_STATE);
         }
 
         @Test
@@ -94,8 +114,8 @@ class QueueTokenTest {
             QueueToken token = QueueToken.issue(userId, programId);
             token.cancel();
 
-            assertThatThrownBy(token::admit)
-                .isInstanceOf(InvalidTokenStateException.class);
+            assertThatThrownBy(() -> token.admit(DUMMY_ENTRY_TOKEN))
+                    .isInstanceOf(InvalidTokenStateException.class);
         }
 
         @Test
@@ -104,8 +124,8 @@ class QueueTokenTest {
             QueueToken token = QueueToken.issue(userId, programId);
             token.expire();
 
-            assertThatThrownBy(token::admit)
-                .isInstanceOf(InvalidTokenStateException.class);
+            assertThatThrownBy(() -> token.admit(DUMMY_ENTRY_TOKEN))
+                    .isInstanceOf(InvalidTokenStateException.class);
         }
     }
 
@@ -127,10 +147,10 @@ class QueueTokenTest {
         @DisplayName("ADMITTED 상태에서 cancel 시 예외가 발생한다")
         void admitted에서_cancel_시_예외() {
             QueueToken token = QueueToken.issue(userId, programId);
-            token.admit();
+            token.admit(DUMMY_ENTRY_TOKEN);
 
             assertThatThrownBy(token::cancel)
-                .isInstanceOf(InvalidTokenStateException.class);
+                    .isInstanceOf(InvalidTokenStateException.class);
         }
     }
 
@@ -155,7 +175,7 @@ class QueueTokenTest {
             token.cancel();
 
             assertThatThrownBy(token::expire)
-                .isInstanceOf(InvalidTokenStateException.class);
+                    .isInstanceOf(InvalidTokenStateException.class);
         }
     }
 
@@ -164,17 +184,18 @@ class QueueTokenTest {
     class Restore {
 
         @Test
-        @DisplayName("저장된 상태 그대로 복원된다")
-        void 저장된_상태_그대로_복원() {
+        @DisplayName("ADMITTED 토큰을 entryToken과 함께 복원한다")
+        void ADMITTED_토큰_복원() {
             QueueToken issued = QueueToken.issue(userId, programId);
-            issued.admit();
+            issued.admit(DUMMY_ENTRY_TOKEN);
 
             QueueToken restored = QueueToken.restore(
-                issued.getId(),
-                issued.getUserId(),
-                issued.getProgramId(),
-                issued.getIssuedAt(),
-                issued.getStatus()
+                    issued.getId(),
+                    issued.getUserId(),
+                    issued.getProgramId(),
+                    issued.getIssuedAt(),
+                    issued.getStatus(),
+                    issued.getEntryToken()
             );
 
             assertThat(restored.getId()).isEqualTo(issued.getId());
@@ -182,6 +203,25 @@ class QueueTokenTest {
             assertThat(restored.getProgramId()).isEqualTo(issued.getProgramId());
             assertThat(restored.getIssuedAt()).isEqualTo(issued.getIssuedAt());
             assertThat(restored.getStatus()).isEqualTo(TokenStatus.ADMITTED);
+            assertThat(restored.getEntryToken()).isEqualTo(DUMMY_ENTRY_TOKEN);
+        }
+
+        @Test
+        @DisplayName("WAITING 토큰은 entryToken null 로 복원된다")
+        void WAITING_토큰_복원() {
+            QueueToken issued = QueueToken.issue(userId, programId);
+
+            QueueToken restored = QueueToken.restore(
+                    issued.getId(),
+                    issued.getUserId(),
+                    issued.getProgramId(),
+                    issued.getIssuedAt(),
+                    issued.getStatus(),
+                    null
+            );
+
+            assertThat(restored.getStatus()).isEqualTo(TokenStatus.WAITING);
+            assertThat(restored.getEntryToken()).isNull();
         }
     }
 }

@@ -60,6 +60,12 @@ include::{snippets}/queue-token-duplicate/response-fields.adoc[]
 
 operation::queue-token-get[snippets='http-request,path-parameters,request-headers,http-response,response-fields']
 
+=== ADMITTED 상태 응답
+
+큐에서 빠진 후 (입장 가능) 응답.
+
+operation::queue-token-get-admitted[snippets='http-response,response-fields']
+
 === 에러 응답
 
 ==== 토큰 없음 (404)

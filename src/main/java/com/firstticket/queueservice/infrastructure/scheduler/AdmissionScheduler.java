@@ -79,6 +79,9 @@ public class AdmissionScheduler {
             return;
         }
 
+        log.info("[AdmissionScheduler] programId={} 의 {} 명을 admit 합니다",
+            programId.asString(), candidates.size());
+
         int successCount = 0;
         for (QueueToken queueToken : candidates) {
             try {

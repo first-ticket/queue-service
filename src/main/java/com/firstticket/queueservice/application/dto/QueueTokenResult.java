@@ -9,13 +9,16 @@ public record QueueTokenResult(
     QueueTokenId tokenId,
     TokenStatus status,
     IssuedAt issuedAt,
-    Long position
+    Long position,
+    String entryToken
 ) {
     public static QueueTokenResult of(QueueToken token, Long position) {
         return new QueueTokenResult(
             token.getId(),
             token.getStatus(),
             token.getIssuedAt(),
-            position);
+            position,
+            token.getEntryToken()
+        );
     }
 }

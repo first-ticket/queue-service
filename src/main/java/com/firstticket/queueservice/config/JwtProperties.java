@@ -14,4 +14,12 @@ public record JwtProperties(
     String secret,
     Duration entryTokenTtl
 ) {
+    public JwtProperties {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException("queue.jwt.secret must not be blank");
+        }
+        if (entryTokenTtl == null || entryTokenTtl.isZero() || entryTokenTtl.isNegative()) {
+            throw new IllegalArgumentException("queue.jwt.entry-token-ttl must be positive");
+        }
+    }
 }

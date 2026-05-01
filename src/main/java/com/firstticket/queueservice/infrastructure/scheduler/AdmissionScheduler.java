@@ -39,7 +39,7 @@ public class AdmissionScheduler {
 
     private final QueueTokenRepository queueTokenRepository;
     private final EntryTokenIssuer entryTokenIssuer;
-    private QueueProperties queueProperties;
+    private final QueueProperties queueProperties;
 
     /**
      * 매 5 초마다 활성 프로그램의 큐 앞 batchSize 명을 admit.
@@ -77,7 +77,9 @@ public class AdmissionScheduler {
         int successCount = 0;
         for (QueueToken queueToken : candidates) {
             try {
-                queueToken.admit(entryTokenIssuer.issue(queueToken));
+                String entryToken = entryTokenIssuer.issue(queueToken);
+                queueToken.admit(entryToken);
+                queueTokenRepository.admit(queueToken);
                 successCount++;
             } catch (Exception e) {
                 log.error("[AdmissionScheduler] admit 실패 - tokenId={}, programId={}",

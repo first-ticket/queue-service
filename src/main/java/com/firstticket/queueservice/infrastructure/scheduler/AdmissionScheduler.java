@@ -4,7 +4,6 @@ import com.firstticket.queueservice.config.QueueProperties;
 import com.firstticket.queueservice.domain.QueueToken;
 import com.firstticket.queueservice.domain.QueueTokenRepository;
 import com.firstticket.queueservice.domain.vo.ProgramId;
-import com.firstticket.queueservice.domain.vo.QueueTokenId;
 import com.firstticket.queueservice.infrastructure.jwt.EntryTokenIssuer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,7 +56,13 @@ public class AdmissionScheduler {
         log.debug("[AdmissionScheduler] 활성 프로그램 {} 개 발견", activePrograms.size());
 
         for (ProgramId programId : activePrograms) {
-            admitProgram(programId);
+            try {
+                admitProgram(programId);
+            } catch (Exception e) {
+                // 한 프로그램의 실패가 다른 프로그램 처리에 영향을 주지 않도록 격리
+                log.error("[AdmissionScheduler] program 단위 처리 실패 - programId={}",
+                    programId.asString(), e);
+            }
         }
     }
 
@@ -77,11 +82,16 @@ public class AdmissionScheduler {
         int successCount = 0;
         for (QueueToken queueToken : candidates) {
             try {
+                // 1. JWT 입장 토큰 발급
                 String entryToken = entryTokenIssuer.issue(queueToken);
+                // 2. 도메인 상태 전이 (WAITING -> ADMITTED) + entryToken 부여
                 queueToken.admit(entryToken);
+                // 3. Redis 영속성 (Sorted Set 제거 + Hash status/entryToken 갱신)
                 queueTokenRepository.admit(queueToken);
                 successCount++;
             } catch (Exception e) {
+                // 한 토큰의 실패가 같은 batch 의 다른 토큰을 막지 않도록 격리
+                // 실패한 토큰은 Sorted Set 에 남아 다음 cycle 에서 재시도
                 log.error("[AdmissionScheduler] admit 실패 - tokenId={}, programId={}",
                     queueToken.getId().asString(), programId.asString(), e);
             }

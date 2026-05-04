@@ -53,10 +53,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 테스트 통과 시 REST Docs snippet 이 자동 생성되며,
  * AsciiDoc 빌드를 거쳐 build/docs/asciidoc/index.html 로 문서화된다.
  *
+ * <p>인증 처리:
+ * <ul>
+ *   <li>실제 운영 환경에선 Gateway 가 Authorization Bearer 토큰 검증 후
+ *       사용자 ID 를 Filter 통해 ThreadLocal (AuthContext) 에 주입한다.</li>
+ *   <li>테스트에선 AuthContext.getUserId() 를 mockStatic 으로 직접 mock 하므로
+ *       실제 헤더는 의미 없다. 단, REST Docs 문서화를 위해 외부 클라이언트
+ *       시각의 Authorization 헤더를 dummy 값으로 보낸다.</li>
+ * </ul>
+ *
  * <p>주요 검증:
  * <ul>
- *   <li>HTTP 메서드별 정상 동작 (POST 201, GET 200, DELETE 204)</li>
- *   <li>인증 헤더 (X-User-Id) 누락 시 401</li>
+ *   <li>HTTP 메서드별 정상 동작 (POST 201, GET 200, DELETE 200)</li>
+ *   <li>인증 실패 시 401</li>
  *   <li>도메인 예외 → HTTP status 매핑 (404, 400, 409)</li>
  * </ul>
  */
@@ -65,6 +74,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Import(GlobalExceptionHandler.class)
 class QueueTokenControllerTest {
+
+    private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final String DUMMY_BEARER_TOKEN = "Bearer dummy-access-token";
 
     @Autowired
     private MockMvc mockMvc;
@@ -90,31 +102,32 @@ class QueueTokenControllerTest {
 
             // when & then
             mockMvc.perform(post("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isCreated())
-                .andDo(document("queue-token-issue",
-                    preprocessRequest(
-                        prettyPrint(),
-                        modifyHeaders().remove("Content-Type")
-                    ),
-                    preprocessResponse(prettyPrint()),
-                    pathParameters(
-                        parameterWithName("programId").description("프로그램 ID")
-                    ),
-                    requestHeaders(
-                        headerWithName("X-User-Id").description("Gateway 가 주입한 사용자 ID")
-                    ),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부"),
-                        fieldWithPath("code").description("응답 코드"),
-                        fieldWithPath("message").description("응답 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각"),
-                        fieldWithPath("data.tokenId").description("발급된 토큰 ID"),
-                        fieldWithPath("data.status").description("토큰 상태 (WAITING)"),
-                        fieldWithPath("data.issuedAt").description("발급 시각"),
-                        fieldWithPath("data.position").description("현재 순번")
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isCreated())
+                    .andDo(document("queue-token-issue",
+                            preprocessRequest(
+                                    prettyPrint(),
+                                    modifyHeaders().remove("Content-Type")
+                            ),
+                            preprocessResponse(prettyPrint()),
+                            pathParameters(
+                                    parameterWithName("programId").description("프로그램 ID")
+                            ),
+                            requestHeaders(
+                                    headerWithName("Authorization")
+                                            .description("Bearer access token (Keycloak 발급)")
+                            ),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부"),
+                                    fieldWithPath("code").description("응답 코드"),
+                                    fieldWithPath("message").description("응답 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각"),
+                                    fieldWithPath("data.tokenId").description("발급된 토큰 ID"),
+                                    fieldWithPath("data.status").description("토큰 상태 (WAITING)"),
+                                    fieldWithPath("data.issuedAt").description("발급 시각"),
+                                    fieldWithPath("data.position").description("현재 순번")
+                            )
+                    ));
         }
     }
 
@@ -134,28 +147,29 @@ class QueueTokenControllerTest {
 
             // when & then
             mockMvc.perform(get("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isOk())
-                .andDo(document("queue-token-get",
-                    preprocessRequest(prettyPrint()),
-                    preprocessResponse(prettyPrint()),
-                    pathParameters(
-                        parameterWithName("programId").description("프로그램 ID")
-                    ),
-                    requestHeaders(
-                        headerWithName("X-User-Id").description("Gateway 가 주입한 사용자 ID")
-                    ),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부"),
-                        fieldWithPath("code").description("응답 코드"),
-                        fieldWithPath("message").description("응답 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각"),
-                        fieldWithPath("data.tokenId").description("토큰 ID"),
-                        fieldWithPath("data.status").description("토큰 상태 (WAITING / ADMITTED / EXPIRED)"),
-                        fieldWithPath("data.issuedAt").description("발급 시각"),
-                        fieldWithPath("data.position").description("현재 순번. ADMITTED 등 큐에서 빠진 상태면 null").optional()
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isOk())
+                    .andDo(document("queue-token-get",
+                            preprocessRequest(prettyPrint()),
+                            preprocessResponse(prettyPrint()),
+                            pathParameters(
+                                    parameterWithName("programId").description("프로그램 ID")
+                            ),
+                            requestHeaders(
+                                    headerWithName("Authorization")
+                                            .description("Bearer access token (Keycloak 발급)")
+                            ),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부"),
+                                    fieldWithPath("code").description("응답 코드"),
+                                    fieldWithPath("message").description("응답 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각"),
+                                    fieldWithPath("data.tokenId").description("토큰 ID"),
+                                    fieldWithPath("data.status").description("토큰 상태 (WAITING / ADMITTED / EXPIRED)"),
+                                    fieldWithPath("data.issuedAt").description("발급 시각"),
+                                    fieldWithPath("data.position").description("현재 순번. ADMITTED 등 큐에서 빠진 상태면 null").optional()
+                            )
+                    ));
         }
     }
 
@@ -173,49 +187,56 @@ class QueueTokenControllerTest {
 
             // when & then
             mockMvc.perform(delete("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isNoContent())
-                .andDo(document("queue-token-cancel",
-                    preprocessRequest(prettyPrint()),
-                    preprocessResponse(prettyPrint()),
-                    pathParameters(
-                        parameterWithName("programId").description("프로그램 ID")
-                    ),
-                    requestHeaders(
-                        headerWithName("X-User-Id").description("Gateway 가 주입한 사용자 ID")
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isOk())
+                    .andDo(document("queue-token-cancel",
+                            preprocessRequest(prettyPrint()),
+                            preprocessResponse(prettyPrint()),
+                            pathParameters(
+                                    parameterWithName("programId").description("프로그램 ID")
+                            ),
+                            requestHeaders(
+                                    headerWithName("Authorization")
+                                            .description("Bearer access token (Keycloak 발급)")
+                            ),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부"),
+                                    fieldWithPath("code").description("응답 코드 (QUEUE_TOKEN_CANCELLED)"),
+                                    fieldWithPath("message").description("응답 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각")
+                            )
+                    ));
         }
     }
 
     // ===== 에러 케이스 =====
 
     @Test
-    @DisplayName("X-User-Id 헤더 없으면 401 Unauthorized")
+    @DisplayName("인증 실패 시 401 Unauthorized")
     void 인증_실패_401() throws Exception {
         // given
         UUID programId = UUID.randomUUID();
 
         try (MockedStatic<AuthContext> mocked = mockStatic(AuthContext.class)) {
             mocked.when(AuthContext::getUserId)
-                .thenThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED));
+                    .thenThrow(new BusinessException(CommonErrorCode.UNAUTHORIZED));
 
             // when & then
             mockMvc.perform(post("/api/v1/queues/programs/{programId}", programId))
-                .andExpect(status().isUnauthorized())
-                .andDo(document("queue-token-unauthorized",
-                    preprocessRequest(
-                        prettyPrint(),
-                        modifyHeaders().remove("Content-Type")
-                    ),
-                    preprocessResponse(prettyPrint()),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부 (false)"),
-                        fieldWithPath("code").description("에러 코드 (UNAUTHORIZED)"),
-                        fieldWithPath("message").description("에러 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각")
-                    )
-                ));
+                    .andExpect(status().isUnauthorized())
+                    .andDo(document("queue-token-unauthorized",
+                            preprocessRequest(
+                                    prettyPrint(),
+                                    modifyHeaders().remove("Content-Type")
+                            ),
+                            preprocessResponse(prettyPrint()),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부 (false)"),
+                                    fieldWithPath("code").description("에러 코드 (UNAUTHORIZED)"),
+                                    fieldWithPath("message").description("에러 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각")
+                            )
+                    ));
         }
     }
 
@@ -232,21 +253,21 @@ class QueueTokenControllerTest {
             mocked.when(AuthContext::getUserId).thenReturn(userId);
 
             mockMvc.perform(post("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isConflict())
-                .andDo(document("queue-token-duplicate",
-                    preprocessRequest(
-                        prettyPrint(),
-                        modifyHeaders().remove("Content-Type")
-                    ),
-                    preprocessResponse(prettyPrint()),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부 (false)"),
-                        fieldWithPath("code").description("에러 코드 (DUPLICATE_TOKEN)"),
-                        fieldWithPath("message").description("에러 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각")
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isConflict())
+                    .andDo(document("queue-token-duplicate",
+                            preprocessRequest(
+                                    prettyPrint(),
+                                    modifyHeaders().remove("Content-Type")
+                            ),
+                            preprocessResponse(prettyPrint()),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부 (false)"),
+                                    fieldWithPath("code").description("에러 코드 (DUPLICATE_TOKEN)"),
+                                    fieldWithPath("message").description("에러 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각")
+                            )
+                    ));
         }
     }
 
@@ -264,18 +285,18 @@ class QueueTokenControllerTest {
 
             // when & then
             mockMvc.perform(get("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isNotFound())
-                .andDo(document("queue-token-get-not-found",
-                    preprocessRequest(prettyPrint()),
-                    preprocessResponse(prettyPrint()),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부 (false)"),
-                        fieldWithPath("code").description("에러 코드 (TOKEN_NOT_FOUND)"),
-                        fieldWithPath("message").description("에러 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각")
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isNotFound())
+                    .andDo(document("queue-token-get-not-found",
+                            preprocessRequest(prettyPrint()),
+                            preprocessResponse(prettyPrint()),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부 (false)"),
+                                    fieldWithPath("code").description("에러 코드 (TOKEN_NOT_FOUND)"),
+                                    fieldWithPath("message").description("에러 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각")
+                            )
+                    ));
         }
     }
 
@@ -293,18 +314,18 @@ class QueueTokenControllerTest {
 
             // when & then
             mockMvc.perform(delete("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isNotFound())
-                .andDo(document("queue-token-cancel-not-found",
-                    preprocessRequest(prettyPrint()),
-                    preprocessResponse(prettyPrint()),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부 (false)"),
-                        fieldWithPath("code").description("에러 코드 (TOKEN_NOT_FOUND)"),
-                        fieldWithPath("message").description("에러 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각")
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isNotFound())
+                    .andDo(document("queue-token-cancel-not-found",
+                            preprocessRequest(prettyPrint()),
+                            preprocessResponse(prettyPrint()),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부 (false)"),
+                                    fieldWithPath("code").description("에러 코드 (TOKEN_NOT_FOUND)"),
+                                    fieldWithPath("message").description("에러 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각")
+                            )
+                    ));
         }
     }
 
@@ -322,18 +343,18 @@ class QueueTokenControllerTest {
 
             // when & then
             mockMvc.perform(delete("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isBadRequest())
-                .andDo(document("queue-token-cancel-invalid-state",
-                    preprocessRequest(prettyPrint()),
-                    preprocessResponse(prettyPrint()),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부 (false)"),
-                        fieldWithPath("code").description("에러 코드 (INVALID_TOKEN_STATE)"),
-                        fieldWithPath("message").description("에러 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각")
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isBadRequest())
+                    .andDo(document("queue-token-cancel-invalid-state",
+                            preprocessRequest(prettyPrint()),
+                            preprocessResponse(prettyPrint()),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부 (false)"),
+                                    fieldWithPath("code").description("에러 코드 (INVALID_TOKEN_STATE)"),
+                                    fieldWithPath("message").description("에러 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각")
+                            )
+                    ));
         }
     }
 
@@ -355,28 +376,29 @@ class QueueTokenControllerTest {
 
             // when & then
             mockMvc.perform(get("/api/v1/queues/programs/{programId}", programId)
-                    .header("X-User-Id", userId.toString()))
-                .andExpect(status().isOk())
-                .andDo(document("queue-token-get-admitted",
-                    preprocessRequest(prettyPrint()),
-                    preprocessResponse(prettyPrint()),
-                    pathParameters(
-                        parameterWithName("programId").description("프로그램 ID")
-                    ),
-                    requestHeaders(
-                        headerWithName("X-User-Id").description("Gateway 가 주입한 사용자 ID")
-                    ),
-                    responseFields(
-                        fieldWithPath("success").description("요청 성공 여부"),
-                        fieldWithPath("code").description("응답 코드"),
-                        fieldWithPath("message").description("응답 메시지"),
-                        fieldWithPath("timestamp").description("응답 시각"),
-                        fieldWithPath("data.tokenId").description("토큰 ID"),
-                        fieldWithPath("data.status").description("토큰 상태 (ADMITTED)"),
-                        fieldWithPath("data.issuedAt").description("발급 시각"),
-                        fieldWithPath("data.entryToken").description("입장 토큰 (JWT) — ADMITTED 상태일 때만 포함")
-                    )
-                ));
+                            .header(AUTHORIZATION_HEADER, DUMMY_BEARER_TOKEN))
+                    .andExpect(status().isOk())
+                    .andDo(document("queue-token-get-admitted",
+                            preprocessRequest(prettyPrint()),
+                            preprocessResponse(prettyPrint()),
+                            pathParameters(
+                                    parameterWithName("programId").description("프로그램 ID")
+                            ),
+                            requestHeaders(
+                                    headerWithName("Authorization")
+                                            .description("Bearer access token (Keycloak 발급)")
+                            ),
+                            responseFields(
+                                    fieldWithPath("success").description("요청 성공 여부"),
+                                    fieldWithPath("code").description("응답 코드"),
+                                    fieldWithPath("message").description("응답 메시지"),
+                                    fieldWithPath("timestamp").description("응답 시각"),
+                                    fieldWithPath("data.tokenId").description("토큰 ID"),
+                                    fieldWithPath("data.status").description("토큰 상태 (ADMITTED)"),
+                                    fieldWithPath("data.issuedAt").description("발급 시각"),
+                                    fieldWithPath("data.entryToken").description("입장 토큰 (JWT) — ADMITTED 상태일 때만 포함")
+                            )
+                    ));
         }
     }
 }

@@ -16,14 +16,14 @@ import java.time.Duration;
 public record QueueProperties(
 
     /**
-     * 대기 토큰의 TTL
+     * 대기 토큰의 TTL.
      * 이 시간 내 입장 승인 못 받으면 자동 만료
      */
     @NotNull
     Duration waitingTtl,
 
     /**
-     * 한 번의 배치 스케줄러 실행 시 입장 승인할 인원 수
+     * 한 번의 배치 스케줄러 실행 시 입장 승인할 인원 수.
      */
     @Min(1)
     int admissionBatchSize

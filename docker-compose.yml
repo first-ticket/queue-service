@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  queue-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: queue-service:latest
+    container_name: queue-service
+    ports:
+      - "8085:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      CONFIG_SERVER_URL: ${CONFIG_SERVER_URL:-http://config-server:8888}
+      CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME}
+      CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD}
+      GITHUB_USER: ${GITHUB_USER}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+
+    networks:
+      - first-ticket-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  first-ticket-network:
+    external: true
+    name: first-ticket-network

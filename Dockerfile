@@ -26,6 +26,9 @@ RUN java -Djarmode=layertools -jar build/libs/*.jar extract
 # ===== Stage 2: Runtime =====
 FROM eclipse-temurin:21-jre-jammy
 
+# healthcheck 위해 curl 설치
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # 비-root 유저 생성
 RUN useradd -ms /bin/bash spring
 
@@ -39,7 +42,7 @@ COPY --from=builder --chown=spring:spring /app/application/ ./
 
 USER spring
 
-EXPOSE 8085
+EXPOSE 8080
 
 ENV JAVA_OPTS=""
 

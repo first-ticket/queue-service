@@ -110,13 +110,9 @@ tasks.register('copyDocument', Copy) { // 생성된 html 파일을 옮긴다
 	into layout.projectDirectory.dir("src/main/resources/static/docs")
 }
 
-tasks.named('build') {
-	dependsOn copyDocument
-}
-
-bootJar {
-	dependsOn asciidoctor
-	from(layout.buildDirectory.dir("docs/asciidoc")) {
-		into 'static/docs'
-	}
+// REST Docs 빌드용 별도 task
+tasks.register('docs') {
+    dependsOn copyDocument
+    description = 'REST Docs 빌드 (test → asciidoctor → copy)'
+    group = 'documentation'
 }

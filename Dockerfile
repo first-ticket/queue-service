@@ -27,7 +27,7 @@ RUN java -Djarmode=layertools -jar build/libs/*.jar extract
 FROM eclipse-temurin:21-jre-jammy
 
 # healthcheck 위해 curl 설치
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # 비-root 유저 생성
 RUN useradd -ms /bin/bash spring

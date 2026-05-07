@@ -12,12 +12,20 @@ COPY build.gradle settings.gradle ./
 
 RUN chmod +x gradlew
 
+ARG GITHUB_USER
+
 # 의존성만 먼저 다운로드 (소스 변경 시에도 이 레이어는 캐시됨)
-RUN ./gradlew bootJar -x test --no-daemon || true
+RUN --mount=type=secret,id=github_token \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
+    GITHUB_USER=$GITHUB_USER \
+    ./gradlew bootJar -x test --no-daemon || true
 
 # 소스 복사 후 빌드
 COPY src src
-RUN ./gradlew clean bootJar --no-daemon -x test
+RUN --mount=type=secret,id=github_token \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
+    GITHUB_USER=$GITHUB_USER \
+    ./gradlew clean bootJar --no-daemon -x test
 
 # 빌드된 jar에서 layer 추출
 RUN java -Djarmode=layertools -jar build/libs/*.jar extract

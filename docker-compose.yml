@@ -1,10 +1,12 @@
-version: '3.9'
-
 services:
   queue-service:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GITHUB_USER: ${GITHUB_USER}
+      secrets:
+        - github_token
     image: queue-service:latest
     container_name: queue-service
     ports:
@@ -14,9 +16,7 @@ services:
       CONFIG_SERVER_URL: ${CONFIG_SERVER_URL:-http://config-server:8080}
       CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME}
       CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD}
-      GITHUB_USER: ${GITHUB_USER}
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-
+      JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
     networks:
       - first-ticket-network
     healthcheck:
@@ -26,6 +26,10 @@ services:
       start_period: 60s
       retries: 3
     restart: unless-stopped
+
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN
 
 networks:
   first-ticket-network:

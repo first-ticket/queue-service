@@ -8,8 +8,8 @@ spring:
       - "optional:configserver:"
   cloud:
     config:
-      username: ${CONFIG_SERVER_USERNAME}
-      password: ${CONFIG_SERVER_PASSWORD}
+      username: ${CONFIG_SERVER_USERNAME:}
+      password: ${CONFIG_SERVER_PASSWORD:}
       discovery:
         enabled: true
         service-id: config-server

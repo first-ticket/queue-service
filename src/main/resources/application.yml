@@ -1,16 +1,30 @@
 spring:
   application:
     name: queue-service
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+
   config:
-    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+    import:
+      - "optional:file:.env[.properties]"
+      - "optional:configserver:"
   cloud:
     config:
       username: ${CONFIG_SERVER_USERNAME:}
       password: ${CONFIG_SERVER_PASSWORD:}
+      discovery:
+        enabled: true
+        service-id: config-server
+      fail-fast: true
+      retry:
+        max-attempts: 20
+        initial-interval: 2000
+        max-interval: 5000
+        multiplier: 1.2
 
 eureka:
+  instance:
+    prefer-ip-address: true
   client:
+    register-with-eureka: true
+    fetch-registry: true
     service-url:
-      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+      defaultZone: http://${EUREKA_SERVER_URL:localhost}:8761/eureka/

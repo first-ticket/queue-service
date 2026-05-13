@@ -1,0 +1,109 @@
+name: CI/CD - Build, Test, and Deploy
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  id-token: write       # OIDC AWS 인증용
+  contents: read        # 코드 체크아웃
+  packages: read        # GitHub Packages (common 모듈) 읽기
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: first-ticket/queue-service
+  # GitHub Actions 자동 제공 토큰 - common 모듈 접근용
+  GITHUB_USER: ${{ github.actor }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  # 1) 빌드 + 테스트 (모든 PR/push에서 실행)
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Build & Test
+        run: ./gradlew build --no-daemon
+
+      - name: Upload test report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report
+          path: build/reports/tests/
+          retention-days: 7
+
+  # 2) ECR 푸시 (main 브랜치 push 시)
+  push-to-ecr:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build, tag, and push image to ECR
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            --build-arg GITHUB_USER=${{ github.actor }} \
+            --secret id=github_token,env=GITHUB_TOKEN \
+            -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $REGISTRY/$ECR_REPOSITORY:latest \
+            --push \
+            .
+
+      - name: Show pushed image
+        run: |
+          echo "✅ Pushed: $ECR_REPOSITORY:${{ github.sha }}"
+          echo "✅ Pushed: $ECR_REPOSITORY:latest"
+
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition --task-definition queue-service \
+            --query taskDefinition > task-definition.json
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: task-definition.json
+          service: queue-service-service
+          cluster: first-ticket-cluster
+          wait-for-service-stability: false

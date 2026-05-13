@@ -9,7 +9,6 @@ on:
     branches:
       - main
       - dev
-      - chore/28-deploy
   workflow_dispatch:
 
 permissions:
@@ -56,12 +55,10 @@ jobs:
           path: build/reports/tests/
           retention-days: 7
 
-  # 2) ECR 푸시 (main 또는 작업 브랜치 push 시)
+  # 2) ECR 푸시 (main 브랜치 push 시)
   push-to-ecr:
     needs: build-and-test
-    if: |
-      github.event_name == 'push' && 
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/chore/28-deploy')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:

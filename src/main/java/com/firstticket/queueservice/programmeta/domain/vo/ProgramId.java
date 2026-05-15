@@ -1,4 +1,4 @@
-package com.firstticket.queueservice.queuetoken.domain.vo;
+package com.firstticket.queueservice.programmeta.domain.vo;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -8,7 +8,6 @@ import java.util.UUID;
  * 원본은 program-service 가 소유하며, queue-service 는 동일한 UUID 를 참조한다.
  */
 public record ProgramId(UUID id) {
-
     public ProgramId {
         Objects.requireNonNull(id, "ProgramId는 null일 수 없습니다");
     }

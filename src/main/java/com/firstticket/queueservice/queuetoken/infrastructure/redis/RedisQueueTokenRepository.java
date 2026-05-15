@@ -389,6 +389,84 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
             .toList();
     }
 
+    /**
+     * Redis 기반 deleteAllByProgramId 구현.
+     *
+     * <p>Program 취소 시 해당 프로그램의 모든 토큰 (대기 + 입장) 정리.
+     *
+     * <p>처리 단계:
+     * <ol>
+     *   <li>SCAN 으로 모든 token Hash 키 ({@code queue:token:*}) 조회</li>
+     *   <li>각 Hash 의 programId 필드를 확인하여 일치하는 토큰 식별</li>
+     *   <li>일치 토큰의 Hash + 역인덱스 + Sorted Set 자체를 일괄 삭제</li>
+     * </ol>
+     *
+     * <p>주의: 입장 (ADMITTED) 된 토큰은 Sorted Set 에서 이미 빠져 있어
+     * Sorted Set 조회로는 못 찾는다. ADMITTED 토큰 정리는 SCAN 으로 추가 처리.
+     *
+     * <p>미래 개선: 프로그램별 토큰 ID Set 을 별도 유지하면 SCAN 불필요.
+     * 예: {@code queue:program:{programId}:all = {tokenId1, tokenId2, ...}}</p>
+     */
+    @Override
+    public void deleteAllByProgramId(ProgramId programId) {
+        String programKey = programKey(programId);
+        String programIdStr = programId.asString();
+
+        // 1. SCAN 으로 모든 token Hash 키 찾기 (programId 일치하는 것)
+        Set<String> tokenKeysToDelete = new HashSet<>();
+        List<String> userProgramKeysToDelete = new ArrayList<>();
+
+        String tokenKeyPattern = QUEUE_KEY_PREFIX + TOKEN_KEY_PREFIX + "*";
+        Set<String> allTokenKeys = scanKeys(tokenKeyPattern);
+
+        HashOperations<String, String, String> hashOps = redisTemplate.opsForHash();
+
+        for (String tokenKey : allTokenKeys) {
+            String tokenProgramId = hashOps.get(tokenKey, FIELD_PROGRAM_ID);
+            if (programIdStr.equals(tokenProgramId)) {
+                // 일치 → 삭제 대상
+                tokenKeysToDelete.add(tokenKey);
+
+                // 역인덱스 키도 만들기 위해 userId 조회
+                String userId = hashOps.get(tokenKey, FIELD_USER_ID);
+                if (userId != null) {
+                    String userProgramKey = QUEUE_KEY_PREFIX + USER_KEY_PREFIX + userId
+                        + ":" + PROGRAM_KEY_PREFIX + programIdStr;
+                    userProgramKeysToDelete.add(userProgramKey);
+                }
+            }
+        }
+
+        // 2. 삭제 대상 모두 모음 (Sorted Set + Hash + 역인덱스)
+        List<String> allKeysToDelete = new ArrayList<>();
+        allKeysToDelete.add(programKey);   // Sorted Set
+        allKeysToDelete.addAll(tokenKeysToDelete);
+        allKeysToDelete.addAll(userProgramKeysToDelete);
+
+        // 3. 일괄 삭제
+        Long deletedCount = redisTemplate.delete(allKeysToDelete);
+
+        log.info("프로그램 토큰 삭제 완료. programId={}, 삭제 키 수={}",
+            programIdStr, deletedCount);
+    }
+
+    private Set<String> scanKeys(String pattern) {
+        return redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
+            Set<String> result = new HashSet<>();
+            ScanOptions options = ScanOptions.scanOptions()
+                .match(pattern)
+                .count(100)
+                .build();
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    result.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                }
+            }
+            return result;
+        });
+    }
+
+
     // ===== 키 생성 헬퍼 =====
 
     private String programKey(ProgramId programId) {

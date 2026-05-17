@@ -5,9 +5,43 @@ spring:
   config:
     import: ""
 
+  datasource:
+    url: jdbc:tc:postgresql:16-alpine:///testdb
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        default_schema: queue_schema
+    open-in-view: false
+
+  flyway:
+    enabled: false
+
+  kafka:
+    consumer:
+      auto-startup: false
+      group-id: test-group
+    listener:
+      missing-topics-fatal: false
+
 eureka:
   client:
     enabled: false
+
+# Outbox 스케줄러 비활성 (운영과 일관)
+common:
+  messaging:
+    scheduler:
+      enabled: false
+
+kafka:
+  topics:
+    program-created: program.created
+    program-time-updated: program.time.updated
+    program-cancelled: program.cancelled
 
 queue:
   token:

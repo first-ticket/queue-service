@@ -139,7 +139,7 @@ public class RedisProgramMetaRepository implements ProgramMetaRepository {
                 ProgramId.of(UUID.fromString(data.get(FIELD_PROGRAM_ID))),
                 parseDateTime(data.get(FIELD_OPEN_AT)),
                 parseDateTime(data.get(FIELD_CLOSE_AT)),
-                ProgramStatus.valueOf(data.get(FIELD_STATUS))
+                ProgramStatus.parse(data.get(FIELD_STATUS))
             );
         } catch (Exception e) {
             throw new IllegalStateException("ProgramMeta 역직렬화 실패", e);

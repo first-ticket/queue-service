@@ -28,7 +28,7 @@ public record CreateProgramMetaCommand(
             ProgramId.of(programId),
             openAt,
             closeAt,
-            ProgramStatus.valueOf(status)
+            ProgramStatus.parse(status)
         );
     }
 }

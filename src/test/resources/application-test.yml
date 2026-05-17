@@ -22,9 +22,9 @@ spring:
 
   kafka:
     consumer:
-      auto-startup: false
       group-id: test-group
     listener:
+      auto-startup: false
       missing-topics-fatal: false
 
 eureka:

@@ -15,7 +15,7 @@ public record CancelProgramCommand(
     public static CancelProgramCommand of(UUID programId, String status) {
         return new CancelProgramCommand(
             ProgramId.of(programId),
-            ProgramStatus.valueOf(status)
+            ProgramStatus.parse(status)
         );
     }
 }

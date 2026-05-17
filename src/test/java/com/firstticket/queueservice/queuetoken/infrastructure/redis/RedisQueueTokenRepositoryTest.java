@@ -6,7 +6,6 @@ import com.firstticket.queueservice.queuetoken.domain.exception.DuplicateTokenEx
 import com.firstticket.queueservice.queuetoken.domain.vo.ProgramId;
 import com.firstticket.queueservice.queuetoken.domain.vo.QueueTokenId;
 import com.firstticket.queueservice.queuetoken.domain.vo.UserId;
-import com.firstticket.queueservice.queuetoken.infrastructure.redis.RedisQueueTokenRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -398,68 +397,6 @@ class RedisQueueTokenRepositoryTest {
             Optional<QueueToken> found = repository.findByUserIdAndProgramId(userId, programId);
             assertThat(found).isPresent();
             assertThat(found.get().getStatus()).isEqualTo(TokenStatus.ADMITTED);
-        }
-    }
-
-    @Nested
-    @DisplayName("findActiveProgramIds")
-    class FindActiveProgramIds {
-
-        @Test
-        @DisplayName("큐가 없으면 빈 리스트 반환")
-        void 큐_없음_빈_리스트() {
-            List<ProgramId> result = repository.findActiveProgramIds();
-
-            assertThat(result).isEmpty();
-        }
-
-        @Test
-        @DisplayName("한 프로그램에 토큰이 있으면 그 프로그램 ID 1 개 반환")
-        void 한_프로그램_1_개() {
-            // given
-            UserId userId = UserId.of(UUID.randomUUID());
-            ProgramId programId = ProgramId.of(UUID.randomUUID());
-            repository.enqueue(QueueToken.issue(userId, programId));
-
-            // when
-            List<ProgramId> result = repository.findActiveProgramIds();
-
-            // then
-            assertThat(result).containsExactly(programId);
-        }
-
-        @Test
-        @DisplayName("여러 프로그램에 토큰이 있으면 모든 프로그램 ID 반환")
-        void 여러_프로그램_모두() {
-            // given
-            ProgramId program1 = ProgramId.of(UUID.randomUUID());
-            ProgramId program2 = ProgramId.of(UUID.randomUUID());
-            ProgramId program3 = ProgramId.of(UUID.randomUUID());
-            repository.enqueue(QueueToken.issue(UserId.of(UUID.randomUUID()), program1));
-            repository.enqueue(QueueToken.issue(UserId.of(UUID.randomUUID()), program2));
-            repository.enqueue(QueueToken.issue(UserId.of(UUID.randomUUID()), program3));
-
-            // when
-            List<ProgramId> result = repository.findActiveProgramIds();
-
-            // then
-            assertThat(result).containsExactlyInAnyOrder(program1, program2, program3);
-        }
-
-        @Test
-        @DisplayName("같은 프로그램에 여러 토큰이 있어도 프로그램 ID 1 개만 반환")
-        void 같은_프로그램_중복_X() {
-            // given
-            ProgramId programId = ProgramId.of(UUID.randomUUID());
-            repository.enqueue(QueueToken.issue(UserId.of(UUID.randomUUID()), programId));
-            repository.enqueue(QueueToken.issue(UserId.of(UUID.randomUUID()), programId));
-            repository.enqueue(QueueToken.issue(UserId.of(UUID.randomUUID()), programId));
-
-            // when
-            List<ProgramId> result = repository.findActiveProgramIds();
-
-            // then
-            assertThat(result).containsExactly(programId);
         }
     }
 

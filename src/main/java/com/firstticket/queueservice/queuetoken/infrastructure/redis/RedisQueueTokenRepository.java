@@ -339,55 +339,57 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         });
     }
 
-    /**
-     * Redis 기반 findActiveProgramIds 구현.
-     *
-     * <p>{@code queue:program:*} 패턴으로 SCAN 하여 활성 프로그램 ID 목록을 반환한다.
-     *
-     * <p>SCAN 사용 이유: KEYS 명령은 production 에서 블로킹 발생 위험. SCAN 은 점진적.
-     *
-     * <h3>Future Work</h3>
-     * 본 메서드는 MVP 의 가정 (큐 존재 = 활성 프로그램) 을 따른다.
-     * <p>program-service 와 Kafka 이벤트 통합 후엔:
-     * <ul>
-     *   <li>{@code program.opened} 이벤트 → Redis Set 의 활성 프로그램 추가</li>
-     *   <li>{@code program.closed} 이벤트 → Set 에서 제거</li>
-     *   <li>본 메서드는 Redis Set 직접 조회 (SCAN 불필요)</li>
-     * </ul>
-     */
-    public List<ProgramId> findActiveProgramIds() {
-        String pattern = QUEUE_KEY_PREFIX + PROGRAM_KEY_PREFIX + "*";
-
-        // 1. SCAN 으로 모든 큐 키 수집
-        Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
-            Set<String> result = new HashSet<>();
-            ScanOptions options = ScanOptions.scanOptions()
-                .match(pattern)     // queue:program:* 매칭
-                .count(100)         // 한 번에 100 개씩 점진적 조회
-                .build();
-
-            // try-with-resources 로 cursor 자동 정리
-            try (Cursor<byte[]> cursor = connection.scan(options)) {
-                while (cursor.hasNext()) {
-                    // Redis 는 byte[] 반환 → UTF-8 문자열로 변환
-                    result.add(new String(cursor.next(), StandardCharsets.UTF_8));
-                }
-            }
-            return result;
-        });
-
-        if (keys == null || keys.isEmpty()) {
-            return List.of();
-        }
-
-        // 2. 키에서 UUID 추출하여 ProgramId 로 변환
-        // 예: "queue:program:abc-123" → "abc-123" → ProgramId.of("abc-123")
-        String prefix = QUEUE_KEY_PREFIX + PROGRAM_KEY_PREFIX;
-        return keys.stream()
-            .map(key -> key.substring(prefix.length()))
-            .map(ProgramId::fromString)
-            .toList();
-    }
+// program-service 와 kafka 이벤트 통합 후 교체 완료
+//
+//    /**
+//     * Redis 기반 findActiveProgramIds 구현.
+//     *
+//     * <p>{@code queue:program:*} 패턴으로 SCAN 하여 활성 프로그램 ID 목록을 반환한다.
+//     *
+//     * <p>SCAN 사용 이유: KEYS 명령은 production 에서 블로킹 발생 위험. SCAN 은 점진적.
+//     *
+//     * <h3>Future Work</h3>
+//     * 본 메서드는 MVP 의 가정 (큐 존재 = 활성 프로그램) 을 따른다.
+//     * <p>program-service 와 Kafka 이벤트 통합 후엔:
+//     * <ul>
+//     *   <li>{@code program.opened} 이벤트 → Redis Set 의 활성 프로그램 추가</li>
+//     *   <li>{@code program.closed} 이벤트 → Set 에서 제거</li>
+//     *   <li>본 메서드는 Redis Set 직접 조회 (SCAN 불필요)</li>
+//     * </ul>
+//     */
+//    public List<ProgramId> findActiveProgramIds() {
+//        String pattern = QUEUE_KEY_PREFIX + PROGRAM_KEY_PREFIX + "*";
+//
+//        // 1. SCAN 으로 모든 큐 키 수집
+//        Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
+//            Set<String> result = new HashSet<>();
+//            ScanOptions options = ScanOptions.scanOptions()
+//                .match(pattern)     // queue:program:* 매칭
+//                .count(100)         // 한 번에 100 개씩 점진적 조회
+//                .build();
+//
+//            // try-with-resources 로 cursor 자동 정리
+//            try (Cursor<byte[]> cursor = connection.scan(options)) {
+//                while (cursor.hasNext()) {
+//                    // Redis 는 byte[] 반환 → UTF-8 문자열로 변환
+//                    result.add(new String(cursor.next(), StandardCharsets.UTF_8));
+//                }
+//            }
+//            return result;
+//        });
+//
+//        if (keys == null || keys.isEmpty()) {
+//            return List.of();
+//        }
+//
+//        // 2. 키에서 UUID 추출하여 ProgramId 로 변환
+//        // 예: "queue:program:abc-123" → "abc-123" → ProgramId.of("abc-123")
+//        String prefix = QUEUE_KEY_PREFIX + PROGRAM_KEY_PREFIX;
+//        return keys.stream()
+//            .map(key -> key.substring(prefix.length()))
+//            .map(ProgramId::fromString)
+//            .toList();
+//    }
 
     /**
      * Redis 기반 deleteAllByProgramId 구현.

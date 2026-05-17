@@ -5,6 +5,7 @@ import com.firstticket.queueservice.programmeta.domain.vo.ProgramId;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * ProgramMeta 영속화 인터페이스.
@@ -18,6 +19,10 @@ public interface ProgramMetaRepository {
     void save(ProgramMeta programMeta);
 
     Optional<ProgramMeta> findById(ProgramId programId);
+
+    default Optional<ProgramMeta> findById(UUID programId) {
+        return findById(ProgramId.of(programId));
+    }
 
     List<ProgramMeta> findAll();
 

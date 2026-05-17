@@ -1,6 +1,7 @@
 package com.firstticket.queueservice.programmeta.infrastructure.redis;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.firstticket.queueservice.programmeta.domain.ProgramMeta;
 import com.firstticket.queueservice.programmeta.domain.ProgramMetaRepository;
@@ -130,14 +131,17 @@ public class RedisProgramMetaRepository implements ProgramMetaRepository {
      */
     private ProgramMeta deserialize(String json) {
         try {
-            Map<String, String> data = objectMapper.readValue(json, Map.class);
+            Map<String, String> data = objectMapper.readValue(
+                json,
+                new TypeReference<Map<String, String>>() {}
+            );
             return ProgramMeta.of(
                 ProgramId.of(UUID.fromString(data.get(FIELD_PROGRAM_ID))),
                 parseDateTime(data.get(FIELD_OPEN_AT)),
                 parseDateTime(data.get(FIELD_CLOSE_AT)),
                 ProgramStatus.valueOf(data.get(FIELD_STATUS))
             );
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("ProgramMeta 역직렬화 실패", e);
         }
     }

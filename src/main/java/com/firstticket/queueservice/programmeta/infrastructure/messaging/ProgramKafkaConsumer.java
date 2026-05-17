@@ -1,5 +1,6 @@
 package com.firstticket.queueservice.programmeta.infrastructure.messaging;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.firstticket.queueservice.programmeta.application.ProgramMetaService;
 import com.firstticket.queueservice.programmeta.application.dto.CancelProgramCommand;
@@ -42,7 +43,13 @@ public class ProgramKafkaConsumer {
 
             programMetaService.handleCreated(command);
             ack.acknowledge();
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            // 메시지 자체가 잘못됨 → 건너뜀 (재시도해도 같은 결과)
+            log.error("잘못된 메시지. 건너뜀. topic={}, key={}, value={}",
+                record.topic(), record.key(), record.value(), e);
+            ack.acknowledge();
         } catch (Exception e) {
+            // 일시 장애 → 재전송 기다림
             log.error("program.created 처리 실패. record={}", record, e);
         }
     }
@@ -59,6 +66,11 @@ public class ProgramKafkaConsumer {
 
             programMetaService.handleTimeUpdated(command);
             ack.acknowledge();
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            log.error("잘못된 메시지. 건너뜀. topic={}, key={}, value={}",
+                record.topic(), record.key(), record.value(), e);
+            ack.acknowledge();
+
         } catch (Exception e) {
             log.error("program.time.updated 처리 실패. record={}", record, e);
         }
@@ -76,6 +88,11 @@ public class ProgramKafkaConsumer {
 
             programMetaService.handleCancelled(command);
             ack.acknowledge();
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            log.error("잘못된 메시지. 건너뜀. topic={}, key={}, value={}",
+                record.topic(), record.key(), record.value(), e);
+            ack.acknowledge();
+
         } catch (Exception e) {
             log.error("program.cancelled 처리 실패. record={}", record, e);
         }

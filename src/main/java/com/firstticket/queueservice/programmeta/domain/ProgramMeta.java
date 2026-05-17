@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 /**
  * Program 의 메타 정보 (Aggregate Root).
@@ -35,6 +36,9 @@ public class ProgramMeta {
      */
     public static ProgramMeta of(ProgramId programId, LocalDateTime openAt,
                                  LocalDateTime closeAt, ProgramStatus status) {
+        Objects.requireNonNull(programId, "programId는 null일 수 없습니다.");
+        Objects.requireNonNull(status, "status는 null일 수 없습니다.");
+        validateSchedule(openAt, closeAt);
         return new ProgramMeta(
             programId,
             openAt,
@@ -47,8 +51,15 @@ public class ProgramMeta {
      * 스케줄 갱신. program.time.updated 이벤트 처리 시 호출.
      */
     public void updateTime(LocalDateTime newOpenAt, LocalDateTime newCloseAt) {
+        validateSchedule(newOpenAt, newCloseAt);
         this.openAt = newOpenAt;
         this.closeAt = newCloseAt;
+    }
+
+    private static void validateSchedule(LocalDateTime openAt, LocalDateTime closeAt) {
+        if (openAt != null && closeAt != null && openAt.isAfter(closeAt)) {
+            throw new IllegalArgumentException("openAt은 closeAt보다 늦을 수 없습니다");
+        }
     }
 
     /**

@@ -29,13 +29,19 @@ public class ProgramMetaService {
     public void handleCreated(CreateProgramMetaCommand command) {
         log.info("Program created. programId={}, status={}", command.programId(), command.status());
 
-        ProgramMeta programMeta = ProgramMeta.of(
-            command.programId(),
-            command.openAt(),
-            command.closeAt(),
-            command.status()
-        );
-        programMetaRepository.save(programMeta);
+        programMetaRepository.findById(command.programId())
+            .ifPresentOrElse(
+                existing -> log.info("ProgramMeta already exists. skip created. programId={}", command.programId()),
+                () -> {
+                    ProgramMeta programMeta = ProgramMeta.of(
+                        command.programId(),
+                        command.openAt(),
+                        command.closeAt(),
+                        command.status()
+                    );
+                    programMetaRepository.save(programMeta);
+                }
+            );
     }
 
     /**

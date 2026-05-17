@@ -8,7 +8,10 @@ import com.firstticket.queueservice.queuetoken.application.dto.IssueQueueTokenCo
 import com.firstticket.queueservice.queuetoken.application.dto.QueueTokenResult;
 import com.firstticket.queueservice.queuetoken.domain.QueueToken;
 import com.firstticket.queueservice.queuetoken.domain.QueueTokenRepository;
-import com.firstticket.queueservice.queuetoken.domain.exception.*;
+import com.firstticket.queueservice.queuetoken.domain.exception.DuplicateTokenException;
+import com.firstticket.queueservice.queuetoken.domain.exception.InvalidTokenStateException;
+import com.firstticket.queueservice.queuetoken.domain.exception.ProgramNotFoundException;
+import com.firstticket.queueservice.queuetoken.domain.exception.TokenNotFoundException;
 import com.firstticket.queueservice.queuetoken.domain.vo.ProgramId;
 import com.firstticket.queueservice.queuetoken.domain.vo.UserId;
 import lombok.RequiredArgsConstructor;
@@ -103,8 +106,6 @@ public class QueueTokenService {
         ProgramMeta programMeta = programMetaRepository.findById(programId.id())
             .orElseThrow(ProgramNotFoundException::new);
 
-        if (!programMeta.isActiveAt(LocalDateTime.now())) {
-            throw new ProgramNotActiveException();
-        }
+        programMeta.ensureActiveAt(LocalDateTime.now());
     }
 }

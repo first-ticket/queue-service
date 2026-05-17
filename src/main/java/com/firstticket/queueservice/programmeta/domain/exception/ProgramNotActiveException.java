@@ -1,6 +1,7 @@
-package com.firstticket.queueservice.queuetoken.domain.exception;
+package com.firstticket.queueservice.programmeta.domain.exception;
 
 import com.firstticket.common.exception.BusinessException;
+import com.firstticket.queueservice.queuetoken.domain.exception.QueueErrorCode;
 
 /**
  * 현재 시점이 프로그램의 입장 가능 시간이 아닐 때.

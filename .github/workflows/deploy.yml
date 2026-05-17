@@ -58,7 +58,12 @@ jobs:
   # 2) ECR 푸시 (main 브랜치 push 시)
   push-to-ecr:
     needs: build-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: |
+      github.event_name == 'push' &&
+      (
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/dev'
+      )
     runs-on: ubuntu-latest
 
     steps:

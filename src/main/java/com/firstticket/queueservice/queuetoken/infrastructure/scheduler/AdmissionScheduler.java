@@ -1,5 +1,6 @@
 package com.firstticket.queueservice.queuetoken.infrastructure.scheduler;
 
+import com.firstticket.queueservice.programmeta.domain.ProgramMetaRepository;
 import com.firstticket.queueservice.queuetoken.config.QueueProperties;
 import com.firstticket.queueservice.queuetoken.domain.QueueToken;
 import com.firstticket.queueservice.queuetoken.domain.QueueTokenRepository;
@@ -10,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -20,7 +22,8 @@ import java.util.List;
  *
  * <p>흐름:
  * <ol>
- *   <li>Redis SCAN 으로 활성 프로그램 (큐가 존재하는 프로그램) 발견</li>
+ *   <li>programmeta Aggregate 에서 활성 프로그램 조회
+ *       (CANCELLED 아니고 openAt ~ closeAt 사이)</li>
  *   <li>각 프로그램의 큐 앞에서 batchSize 명 조회 (Sorted Set ZRANGE)</li>
  *   <li>각 토큰에 대해 JWT 입장 토큰 발급 + 도메인 상태 전이 + Redis 영속성</li>
  * </ol>
@@ -28,7 +31,6 @@ import java.util.List;
  * <p>MVP 단계 한계:
  * <ul>
  *   <li>단일 인스턴스 가정 — 여러 인스턴스에서 동시 실행 시 race 가능 (v0.2.0 별도 이슈)</li>
- *   <li>활성 프로그램 발견을 Redis SCAN 에 의존 — program-service 통합 후 변경</li>
  * </ul>
  */
 @Slf4j
@@ -37,6 +39,7 @@ import java.util.List;
 public class AdmissionScheduler {
 
     private final QueueTokenRepository queueTokenRepository;
+    private final ProgramMetaRepository programMetaRepository;
     private final EntryTokenIssuer entryTokenIssuer;
     private final QueueProperties queueProperties;
 
@@ -47,7 +50,12 @@ public class AdmissionScheduler {
      */
     @Scheduled(fixedRate = 5000)
     public void admit() {
-        List<ProgramId> activePrograms = queueTokenRepository.findActiveProgramIds();
+        // programmeta Aggregate 에서 활성 프로그램 조회 → queuetoken 의 ProgramId 로 변환
+        List<ProgramId> activePrograms = programMetaRepository
+            .findActiveProgramIds(LocalDateTime.now())
+            .stream()
+            .map(metaId -> ProgramId.of(metaId.id()))
+            .toList();
 
         if (activePrograms.isEmpty()) {
             return;

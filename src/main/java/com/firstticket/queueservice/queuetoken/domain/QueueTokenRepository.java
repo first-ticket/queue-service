@@ -56,11 +56,6 @@ public interface QueueTokenRepository {
     void admit(QueueToken token);
 
     /**
-     * 현재 큐가 존재하는 모든 프로그램 ID 를 조회한다.
-     */
-    List<ProgramId> findActiveProgramIds();
-
-    /**
      * 특정 프로그램의 모든 대기 / 입장 토큰을 삭제한다.
      * Program 이 취소되었을 때 호출.
      */

@@ -1,5 +1,7 @@
 package com.firstticket.queueservice.queuetoken.application;
 
+import com.firstticket.queueservice.programmeta.domain.ProgramMeta;
+import com.firstticket.queueservice.programmeta.domain.ProgramMetaRepository;
 import com.firstticket.queueservice.queuetoken.application.dto.CancelQueueTokenCommand;
 import com.firstticket.queueservice.queuetoken.application.dto.GetQueueTokenQuery;
 import com.firstticket.queueservice.queuetoken.application.dto.IssueQueueTokenCommand;
@@ -8,11 +10,14 @@ import com.firstticket.queueservice.queuetoken.domain.QueueToken;
 import com.firstticket.queueservice.queuetoken.domain.QueueTokenRepository;
 import com.firstticket.queueservice.queuetoken.domain.exception.DuplicateTokenException;
 import com.firstticket.queueservice.queuetoken.domain.exception.InvalidTokenStateException;
+import com.firstticket.queueservice.queuetoken.domain.exception.ProgramNotFoundException;
 import com.firstticket.queueservice.queuetoken.domain.exception.TokenNotFoundException;
 import com.firstticket.queueservice.queuetoken.domain.vo.ProgramId;
 import com.firstticket.queueservice.queuetoken.domain.vo.UserId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 
 /**
  * 대기열 진입 / 조회 / 취소를 처리하는 서비스.
@@ -22,6 +27,7 @@ import org.springframework.stereotype.Service;
 public class QueueTokenService {
 
     private final QueueTokenRepository queueTokenRepository;
+    private final ProgramMetaRepository programMetaRepository;
 
     /**
      * 대기열에 진입한다.
@@ -36,7 +42,10 @@ public class QueueTokenService {
         UserId userId = command.userId();
         ProgramId programId = command.programId();
 
-        // 같은 user+program 토큰이 있으면 폐기 후 새로 발급
+        // 1. 활성 프로그램 검증
+        validateProgramActive(programId);
+
+        // 2. 같은 user+program 토큰이 있으면 폐기 후 새로 발급
         queueTokenRepository.findByUserIdAndProgramId(userId, programId)
             .ifPresent(queueTokenRepository::delete);
 
@@ -86,5 +95,17 @@ public class QueueTokenService {
         token.cancel();
 
         queueTokenRepository.delete(token);
+    }
+
+    /**
+     * ProgramMeta 로 활성 프로그램 검증.
+     *
+     * <p>존재 여부 + 시간 + status 를 확인한다.</p>
+     */
+    private void validateProgramActive(ProgramId programId) {
+        ProgramMeta programMeta = programMetaRepository.findById(programId.id())
+            .orElseThrow(ProgramNotFoundException::new);
+
+        programMeta.ensureActiveAt(LocalDateTime.now());
     }
 }

@@ -1,5 +1,6 @@
 package com.firstticket.queueservice.programmeta.domain;
 
+import com.firstticket.queueservice.programmeta.domain.exception.ProgramNotActiveException;
 import com.firstticket.queueservice.programmeta.domain.vo.ProgramId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -77,6 +78,21 @@ public class ProgramMeta {
         if (status == ProgramStatus.CANCELLED) return false;
         if (openAt == null || closeAt == null) return false;
         return !openAt.isAfter(now) && !closeAt.isBefore(now);
+    }
+
+    /**
+     * 현재 시점에 입장 가능한지 보장. 그렇지 않으면 도메인 예외를 던진다.
+     *
+     * <p>대기열 진입 시점처럼 "활성 본질을 강제" 해야 하는 곳에서 사용한다.
+     * 호출 측은 분기 없이 메소드만 호출하면 된다 (Tell, Don't Ask).</p>
+     *
+     * @throws ProgramNotActiveException CANCELLED 이거나 openAt 전 / closeAt 후
+     */
+    public void ensureActiveAt(LocalDateTime now) {
+        Objects.requireNonNull(now, "now는 null일 수 없습니다.");
+        if (!isActiveAt(now)) {
+            throw new ProgramNotActiveException();
+        }
     }
 
     @Override

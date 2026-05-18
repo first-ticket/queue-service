@@ -89,6 +89,7 @@ public class ProgramMeta {
      * @throws ProgramNotActiveException CANCELLED 이거나 openAt 전 / closeAt 후
      */
     public void ensureActiveAt(LocalDateTime now) {
+        Objects.requireNonNull(now, "now는 null일 수 없습니다.");
         if (!isActiveAt(now)) {
             throw new ProgramNotActiveException();
         }

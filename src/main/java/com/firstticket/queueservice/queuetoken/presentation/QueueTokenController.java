@@ -23,6 +23,7 @@ import java.util.UUID;
 public class QueueTokenController {
 
     private final QueueTokenService queueTokenService;
+    private final PollingIntervalPolicy pollingIntervalPolicy;
 
     /**
      * 대기열 진입.
@@ -38,9 +39,10 @@ public class QueueTokenController {
             programId
         );
         QueueTokenResult result = queueTokenService.issueToken(command);
+        Integer retryAfterMs = pollingIntervalPolicy.nextRetryAfterMs(result.position());
         return ApiResponse.success(
             QueueSuccessCode.QUEUE_TOKEN_ISSUED,
-            QueueTokenResponse.from(result)
+            QueueTokenResponse.from(result, retryAfterMs)
         );
     }
 
@@ -55,9 +57,11 @@ public class QueueTokenController {
     ) {
         GetQueueTokenQuery query = GetQueueTokenQuery.of(AuthContext.getUserId(), programId);
         QueueTokenResult result = queueTokenService.getToken(query);
+        Integer retryAfterMs = pollingIntervalPolicy.nextRetryAfterMs(result.position());
         return ApiResponse.success(
             QueueSuccessCode.QUEUE_TOKEN_FOUND,
-            QueueTokenResponse.from(result));
+            QueueTokenResponse.from(result, retryAfterMs)
+        );
     }
 
     /**

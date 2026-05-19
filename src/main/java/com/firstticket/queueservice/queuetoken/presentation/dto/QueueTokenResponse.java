@@ -11,15 +11,17 @@ public record QueueTokenResponse(
     String status,
     LocalDateTime issuedAt,
     Long position,
-    String entryToken
+    String entryToken,
+    Integer retryAfterMs
 ) {
-    public static QueueTokenResponse from(QueueTokenResult result) {
+    public static QueueTokenResponse from(QueueTokenResult result, Integer retryAfterMs) {
         return new QueueTokenResponse(
             result.tokenId().asString(),
             result.status().name(),
             result.issuedAt().value(),
             result.position(),
-            result.entryToken()
+            result.entryToken(),
+            retryAfterMs
         );
     }
 }

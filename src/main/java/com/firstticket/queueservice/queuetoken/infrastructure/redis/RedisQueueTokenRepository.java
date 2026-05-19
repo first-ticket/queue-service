@@ -9,8 +9,8 @@ import com.firstticket.queueservice.queuetoken.domain.vo.IssuedAt;
 import com.firstticket.queueservice.queuetoken.domain.vo.ProgramId;
 import com.firstticket.queueservice.queuetoken.domain.vo.QueueTokenId;
 import com.firstticket.queueservice.queuetoken.domain.vo.UserId;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.*;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
@@ -34,7 +34,6 @@ import java.util.*;
  */
 @Slf4j
 @Repository
-@RequiredArgsConstructor
 public class RedisQueueTokenRepository implements QueueTokenRepository {
 
     // ===== 키 prefix 상수 =====
@@ -56,6 +55,20 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     private final DefaultRedisScript<Long> enqueueScript;
     private final DefaultRedisScript<Long> deleteScript;
     private final DefaultRedisScript<Long> deleteAllByProgramScript;
+
+    public RedisQueueTokenRepository(
+        StringRedisTemplate redisTemplate,
+        QueueProperties properties,
+        @Qualifier("enqueueScript") DefaultRedisScript<Long> enqueueScript,
+        @Qualifier("deleteScript") DefaultRedisScript<Long> deleteScript,
+        @Qualifier("deleteAllByProgramScript") DefaultRedisScript<Long> deleteAllByProgramScript
+    ) {
+        this.redisTemplate = redisTemplate;
+        this.properties = properties;
+        this.enqueueScript = enqueueScript;
+        this.deleteScript = deleteScript;
+        this.deleteAllByProgramScript = deleteAllByProgramScript;
+    }
 
     /**
      * Redis 기반 enqueue 구현 (Lua 스크립트로 원자 처리).

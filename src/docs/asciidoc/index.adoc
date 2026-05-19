@@ -25,10 +25,40 @@
     "tokenId": "...",
     "status": "WAITING",
     "issuedAt": "...",
-    "position": 50
+    "position": 50,
+    "retryAfterMs": 1000
   }
 }
 ----
+
+=== Adaptive Polling (`retryAfterMs`)
+
+대기 정보 응답에 포함되는 `retryAfterMs` 필드는 클라이언트가 다음 폴링까지 대기해야 할 시간(ms)을 서버가 권장하는 값이다.
+
+순번에 따라 차등 적용된다:
+
+[cols="1,1,2", options="header"]
+|===
+| 순번 구간 | 권장 간격 | 비고
+
+| ≤ 100 (임박)
+| 1,000ms
+| Jitter 없음 (빠른 알림 우선)
+
+| ≤ 1,000 (중간)
+| 5,000ms ± 300ms
+| Jitter 적용
+
+| ≤ 10,000 (멀리)
+| 15,000ms ± 500ms
+| Jitter 적용
+
+| > 10,000 (매우 멀리)
+| 30,000ms ± 4,000ms
+| Jitter 적용
+|===
+
+ADMITTED 등 큐에서 빠진 상태의 토큰 조회 시 `retryAfterMs` 는 응답에서 제외된다 (폴링 종료 신호).
 
 == 공통 에러 응답
 
@@ -58,7 +88,7 @@ operation::queue-token-get[snippets='http-request,path-parameters,request-header
 
 === ADMITTED 상태 응답
 
-큐에서 빠진 후 (입장 가능) 응답.
+큐에서 빠진 후 (입장 가능) 응답. `retryAfterMs` 는 포함되지 않으며 클라이언트는 폴링을 중단하고 `entryToken` 으로 입장한다.
 
 operation::queue-token-get-admitted[snippets='http-response,response-fields']
 

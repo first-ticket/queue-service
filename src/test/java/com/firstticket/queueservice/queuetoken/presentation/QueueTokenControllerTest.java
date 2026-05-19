@@ -106,7 +106,7 @@ class QueueTokenControllerTest {
                         fieldWithPath("data.status").description("토큰 상태 (WAITING)"),
                         fieldWithPath("data.issuedAt").description("발급 시각"),
                         fieldWithPath("data.position").description("현재 순번"),
-                        fieldWithPath("data.retryAfterMs").description("다음 폴링까지 권장 대기 시간 (ms). 순번에 따라 차등 적용").optional()  // ← 추가
+                        fieldWithPath("data.retryAfterMs").description("다음 폴링까지 권장 대기 시간 (ms). 순번에 따라 차등 적용")
                     )
                 ));
         }
@@ -149,7 +149,7 @@ class QueueTokenControllerTest {
                         fieldWithPath("data.status").description("토큰 상태 (WAITING / ADMITTED / EXPIRED)"),
                         fieldWithPath("data.issuedAt").description("발급 시각"),
                         fieldWithPath("data.position").description("현재 순번. ADMITTED 등 큐에서 빠진 상태면 null").optional(),
-                        fieldWithPath("data.retryAfterMs").description("다음 폴링까지 권장 대기 시간 (ms). ADMITTED 상태면 null").optional()  // ← 추가
+                        fieldWithPath("data.retryAfterMs").description("다음 폴링까지 권장 대기 시간 (ms). ADMITTED 상태면 null").optional()
                     )
                 ));
         }
@@ -344,7 +344,7 @@ class QueueTokenControllerTest {
         QueueTokenResult result = QueueTokenResult.of(token, null);   // position null
 
         when(queueTokenService.getToken(any())).thenReturn(result);
-        when(pollingIntervalPolicy.nextRetryAfterMs(null)).thenReturn(null);  // ← 추가 (ADMITTED니까 null)
+        when(pollingIntervalPolicy.nextRetryAfterMs(null)).thenReturn(null);  // ADMITTED니까 null
 
         try (MockedStatic<AuthContext> mocked = mockStatic(AuthContext.class)) {
             mocked.when(AuthContext::getUserId).thenReturn(userId);

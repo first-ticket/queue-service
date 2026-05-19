@@ -2,17 +2,18 @@
 -- 프로그램 취소 시 해당 프로그램의 모든 토큰 일괄 삭제 (원자적)
 --
 -- 흐름:
---   1. SCAN 으로 모든 token Hash 키 찾기 (queue:token:*)
---   2. 각 Hash 의 programId 필드 확인
---   3. 일치하면 compare-and-delete:
---      - 역인덱스 (token 의 userId 기반): 현재 값이 이 토큰 ID 일 때만 DEL
---      - Sorted Set 멤버 ZREM
+--   1. 프로그램 단위 토큰 인덱스 (Set) 의 멤버 조회 (SMEMBERS)
+--   2. 각 토큰별 compare-and-delete:
+--      - 역인덱스 (현재 값 일치 시만 DEL)
 --      - Hash DEL
---   4. 마지막에 Sorted Set 자체 + seqKey 일괄 DEL
+--   3. Sorted Set 자체 + seqKey + 프로그램 단위 인덱스 일괄 DEL
+--
+-- SCAN 사용 X — 프로그램 단위 인덱스로 토큰 범위 제한 (성능 + 블로킹 회피)
 --
 -- KEYS:
---   [1] programKey  (queue:program:{programId})
---   [2] seqKey      (queue:seq:{programId})
+--   [1] programKey         (queue:program:{programId})
+--   [2] seqKey             (queue:seq:{programId})
+--   [3] programTokensKey   (queue:program:{programId}:tokens)
 --
 -- ARGV:
 --   [1] programIdStr
@@ -24,49 +25,40 @@
 
 local programKey = KEYS[1]
 local seqKey = KEYS[2]
+local programTokensKey = KEYS[3]
 
 local programIdStr = ARGV[1]
 local tokenKeyPrefix = ARGV[2]
 local userProgramKeyPrefix = ARGV[3]
 local programKeyInfix = ARGV[4]
 
+-- 1. 프로그램 단위 토큰 인덱스 조회 (SCAN X)
+local tokenIds = redis.call('SMEMBERS', programTokensKey)
 local processedCount = 0
-local cursor = "0"
 
-repeat
-    -- 1. SCAN 으로 token Hash 키 페이지 조회
-    local result = redis.call('SCAN', cursor, 'MATCH', tokenKeyPrefix .. '*', 'COUNT', 100)
-    cursor = result[1]
-    local tokenKeys = result[2]
+-- 2. 각 토큰별 정리
+for i, tokenIdStr in ipairs(tokenIds) do
+    local tokenKey = tokenKeyPrefix .. tokenIdStr
+    local userId = redis.call('HGET', tokenKey, 'userId')
 
-    -- 2. 각 토큰 처리
-    for i, tokenKey in ipairs(tokenKeys) do
-        local tokenProgramId = redis.call('HGET', tokenKey, 'programId')
-
-        if tokenProgramId == programIdStr then
-            local userId = redis.call('HGET', tokenKey, 'userId')
-            local tokenIdStr = string.sub(tokenKey, string.len(tokenKeyPrefix) + 1)
-
-            -- 3. compare-and-delete (역인덱스)
-            if userId then
-                local userProgramKey = userProgramKeyPrefix .. userId .. programKeyInfix .. programIdStr
-                local currentTokenIdInIndex = redis.call('GET', userProgramKey)
-                if currentTokenIdInIndex == tokenIdStr then
-                    redis.call('DEL', userProgramKey)
-                end
-            end
-
-            -- 4. Sorted Set 멤버 제거 + Hash 삭제
-            redis.call('ZREM', programKey, tokenIdStr)
-            redis.call('DEL', tokenKey)
-
-            processedCount = processedCount + 1
+    -- 역인덱스 compare-and-delete
+    if userId then
+        local userProgramKey = userProgramKeyPrefix .. userId .. programKeyInfix .. programIdStr
+        local currentTokenIdInIndex = redis.call('GET', userProgramKey)
+        if currentTokenIdInIndex == tokenIdStr then
+            redis.call('DEL', userProgramKey)
         end
     end
-until cursor == "0"
 
--- 5. Sorted Set 자체 + seqKey 일괄 삭제
+    -- Hash 삭제
+    redis.call('DEL', tokenKey)
+
+    processedCount = processedCount + 1
+end
+
+-- 3. Sorted Set 자체 + seqKey + 프로그램 단위 인덱스 일괄 삭제
 redis.call('DEL', programKey)
 redis.call('DEL', seqKey)
+redis.call('DEL', programTokensKey)
 
 return processedCount

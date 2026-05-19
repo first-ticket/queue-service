@@ -11,26 +11,33 @@ import com.firstticket.queueservice.queuetoken.domain.vo.QueueTokenId;
 import com.firstticket.queueservice.queuetoken.domain.vo.UserId;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.data.redis.core.*;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * 대기 토큰의 Redis 기반 영속성 구현체.
  *
- * <p>3가지 자료구조를 조합하여 사용한다:
+ * <p>5가지 자료구조를 조합하여 사용한다:
  * <ul>
  *   <li>Sorted Set ({@code queue:program:{programId}}) — 대기 순번 관리.
- *       score = {@code epoch_milli * 1000000 + sequence} (tie-breaker)</li>
+ *       score = {@code epoch_second * 1000000 + sequence} (tie-breaker)</li>
  *   <li>Hash ({@code queue:token:{tokenId}}) — 토큰 메타 데이터 저장</li>
  *   <li>String ({@code queue:user:{userId}:program:{programId}}) — 역인덱스 (도메인 키 → 토큰 ID)</li>
  *   <li>String ({@code queue:seq:{programId}}) — INCR 시퀀스 (score tie-breaker 용)</li>
+ *   <li>Set ({@code queue:program:{programId}:tokens}) — 프로그램 단위 토큰 인덱스
+ *       (deleteAllByProgramId 측 SCAN 회피)</li>
  * </ul>
  *
- * <p>enqueue / delete 는 Lua 스크립트로 원자 처리한다.</p>
+ * <p>enqueue / delete / deleteAllByProgramId 는 Lua 스크립트로 원자 처리한다.</p>
  */
 @Slf4j
 @Repository
@@ -42,6 +49,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     private static final String TOKEN_KEY_PREFIX = "token:";
     private static final String USER_KEY_PREFIX = "user:";
     private static final String SEQ_KEY_PREFIX = "queue:seq:";
+    private static final String PROGRAM_TOKENS_SUFFIX = ":tokens";
 
     // ===== Hash 필드 이름 상수 =====
     private static final String FIELD_USER_ID = "userId";
@@ -76,9 +84,10 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
      * <p>Lua 스크립트 안에서 한 트랜잭션으로:
      * <ol>
      *   <li>역인덱스 SETNX 로 중복 진입 방지</li>
-     *   <li>INCR 시퀀스 + epoch_milli 로 tie-breaker score 생성</li>
+     *   <li>INCR 시퀀스 + epoch_second 로 tie-breaker score 생성</li>
      *   <li>Sorted Set 추가 (ZADD)</li>
      *   <li>Hash 메타 저장 (HSET) + TTL (EXPIRE)</li>
+     *   <li>프로그램 단위 토큰 인덱스 (Set) 추가 (SADD)</li>
      * </ol>
      */
     @Override
@@ -87,6 +96,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         String tokenKey = tokenKey(token.getId());
         String userProgramKey = userProgramKey(token.getUserId(), token.getProgramId());
         String seqKey = seqKey(token.getProgramId());
+        String programTokensKey = programTokensKey(token.getProgramId());
 
         String tokenIdStr = token.getId().asString();
         long issuedAtEpochMilli = token.getIssuedAt().toEpochMilli();
@@ -94,7 +104,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
 
         Long result = redisTemplate.execute(
             enqueueScript,
-            List.of(userProgramKey, programKey, tokenKey, seqKey),
+            List.of(userProgramKey, programKey, tokenKey, seqKey, programTokensKey),
             tokenIdStr,
             token.getUserId().asString(),
             token.getProgramId().asString(),
@@ -182,6 +192,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
      *   <li>역인덱스 compare-and-delete (다른 토큰 차지 시 보존)</li>
      *   <li>Sorted Set 멤버 제거 (ZREM)</li>
      *   <li>Hash 키 삭제 (DEL)</li>
+     *   <li>프로그램 단위 토큰 인덱스에서 제거 (SREM)</li>
      * </ol>
      *
      * <p>이미 만료 / 삭제된 토큰에 대해서도 안전하게 호출 가능 (멱등).</p>
@@ -191,11 +202,12 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         String programKey = programKey(token.getProgramId());
         String tokenKey = tokenKey(token.getId());
         String userProgramKey = userProgramKey(token.getUserId(), token.getProgramId());
+        String programTokensKey = programTokensKey(token.getProgramId());
         String tokenIdStr = token.getId().asString();
 
         redisTemplate.execute(
             deleteScript,
-            List.of(userProgramKey, programKey, tokenKey),
+            List.of(userProgramKey, programKey, tokenKey, programTokensKey),
             tokenIdStr
         );
     }
@@ -303,9 +315,9 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
      *
      * <p>Lua 스크립트 안에서:
      * <ol>
-     *   <li>SCAN 으로 모든 token Hash 키 조회</li>
-     *   <li>programId 일치 토큰만 compare-and-delete (역인덱스 + Sorted Set + Hash)</li>
-     *   <li>Sorted Set 자체 + seqKey 일괄 삭제</li>
+     *   <li>프로그램 단위 토큰 인덱스 (Set) 의 멤버 조회 (SMEMBERS)</li>
+     *   <li>각 토큰별 compare-and-delete (역인덱스 + Hash)</li>
+     *   <li>Sorted Set 자체 + seqKey + 프로그램 단위 인덱스 일괄 삭제</li>
      * </ol>
      *
      * <p>역인덱스 삭제는 compare-and-delete 로 TOCTOU 방어:
@@ -316,34 +328,19 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         String programKey = programKey(programId);
         String programIdStr = programId.asString();
         String seqKey = seqKey(programId);
+        String programTokensKey = programTokensKey(programId);
 
         Long processedCount = redisTemplate.execute(
             deleteAllByProgramScript,
-            List.of(programKey, seqKey),
+            List.of(programKey, seqKey, programTokensKey),
             programIdStr,
             QUEUE_KEY_PREFIX + TOKEN_KEY_PREFIX,        // tokenKeyPrefix
             QUEUE_KEY_PREFIX + USER_KEY_PREFIX,          // userProgramKeyPrefix
             ":" + PROGRAM_KEY_PREFIX                     // programKeyInfix
         );
 
-        log.info("프로그램 토큰 삭제 완료. programId={}, 삭제 키 수={}",
+        log.info("프로그램 토큰 삭제 완료. programId={}, 처리 토큰 수={}",
             programIdStr, processedCount);
-    }
-
-    private Set<String> scanKeys(String pattern) {
-        return redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
-            Set<String> result = new HashSet<>();
-            ScanOptions options = ScanOptions.scanOptions()
-                .match(pattern)
-                .count(100)
-                .build();
-            try (Cursor<byte[]> cursor = connection.scan(options)) {
-                while (cursor.hasNext()) {
-                    result.add(new String(cursor.next(), StandardCharsets.UTF_8));
-                }
-            }
-            return result;
-        });
     }
 
     // ===== 키 생성 헬퍼 =====
@@ -363,5 +360,9 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
 
     private String seqKey(ProgramId programId) {
         return SEQ_KEY_PREFIX + programId.asString();
+    }
+
+    private String programTokensKey(ProgramId programId) {
+        return QUEUE_KEY_PREFIX + PROGRAM_KEY_PREFIX + programId.asString() + PROGRAM_TOKENS_SUFFIX;
     }
 }

@@ -2,26 +2,24 @@
 -- 대기 토큰 삭제 (원자적)
 --
 -- 흐름:
---   1. 역인덱스 값 검증 (compare-and-delete)
---      — 다른 토큰이 차지했으면 역인덱스 보존 (orphan 방어)
+--   1. 역인덱스 compare-and-delete
 --   2. Sorted Set 멤버 제거 (ZREM)
 --   3. Hash 키 삭제 (DEL)
+--   4. 프로그램 단위 토큰 인덱스에서 제거 (SREM)
 --
 -- KEYS:
 --   [1] userProgramKey
 --   [2] programKey
 --   [3] tokenKey
+--   [4] programTokensKey   ← 새 본문
 --
 -- ARGV:
 --   [1] tokenId
---
--- 반환:
---   1 = 역인덱스도 삭제됨
---   2 = 역인덱스는 보존 (다른 토큰이 차지)
 
 local userProgramKey = KEYS[1]
 local programKey = KEYS[2]
 local tokenKey = KEYS[3]
+local programTokensKey = KEYS[4]
 
 local tokenId = ARGV[1]
 
@@ -33,11 +31,14 @@ if current == tokenId then
     indexDeleted = 1
 end
 
--- 2. Sorted Set 제거
+-- 2. Sorted Set 멤버 제거
 redis.call('ZREM', programKey, tokenId)
 
 -- 3. Hash 삭제
 redis.call('DEL', tokenKey)
+
+-- 4. 프로그램 단위 토큰 인덱스에서 제거
+redis.call('SREM', programTokensKey, tokenId)
 
 if indexDeleted == 1 then
     return 1

@@ -3,15 +3,17 @@
 --
 -- 흐름:
 --   1. 역인덱스 (SETNX) 로 중복 진입 방지
---   2. Score 생성 (epoch_milli * 1000000 + INCR) — tie-breaker
+--   2. Score 생성 (epoch_second * 1000000 + INCR) — tie-breaker
 --   3. Sorted Set 추가 (ZADD)
 --   4. Hash 메타 저장 (HSET) + TTL (EXPIRE)
+--   5. 프로그램 단위 토큰 인덱스 (Set) 추가 (SADD)
 --
 -- KEYS:
---   [1] userProgramKey   (queue:user:{userId}:program:{programId})
---   [2] programKey       (queue:program:{programId})
---   [3] tokenKey         (queue:token:{tokenId})
---   [4] seqKey           (queue:seq:{programId})
+--   [1] userProgramKey
+--   [2] programKey
+--   [3] tokenKey
+--   [4] seqKey
+--   [5] programTokensKey
 --
 -- ARGV:
 --   [1] tokenId
@@ -29,6 +31,7 @@ local userProgramKey = KEYS[1]
 local programKey = KEYS[2]
 local tokenKey = KEYS[3]
 local seqKey = KEYS[4]
+local programTokensKey = KEYS[5]
 
 local tokenId = ARGV[1]
 local userId = ARGV[2]
@@ -43,7 +46,7 @@ if not acquired then
     return 0
 end
 
--- 2. tie-breaker score 생성 (epoch_milli * 1000000 + 시퀀스)
+-- 2. tie-breaker score 생성 (epoch_second * 1000000 + 시퀀스)
 local seq = redis.call('INCR', seqKey)
 redis.call('EXPIRE', seqKey, ttlSeconds)
 local issuedAtEpochSecond = math.floor(issuedAtEpochMilli / 1000)
@@ -59,5 +62,9 @@ redis.call('HSET', tokenKey,
     'issuedAt', tostring(issuedAtEpochMilli),
     'status', status)
 redis.call('EXPIRE', tokenKey, ttlSeconds)
+
+-- 5. 프로그램 단위 토큰 인덱스 (Set) 추가
+redis.call('SADD', programTokensKey, tokenId)
+redis.call('EXPIRE', programTokensKey, ttlSeconds)
 
 return 1

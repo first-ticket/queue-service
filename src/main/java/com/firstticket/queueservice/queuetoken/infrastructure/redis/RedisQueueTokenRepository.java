@@ -98,20 +98,25 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
      * Redis 기반 findById 구현.
      *
      * <p>Hash 전체 조회 후 도메인 객체로 복원한다.
-     * 토큰이 없으면 빈 Map 이 반환되며 (null 아님), Optional.empty() 로 처리한다.
+     * 토큰이 없으면 빈 Map이 반환되며 (null 아님), Optional.empty()로 처리한다.
      */
     @Override
     public Optional<QueueToken> findById(QueueTokenId id) {
         String tokenKey = tokenKey(id);
 
+        // 타입 명시한 Map 으로 받기 위해 hashOps 변수 사용
         HashOperations<String, String, String> hashOps = redisTemplate.opsForHash();
+        // Redis 에서 Hash 전체 조회
         Map<String, String> entries = hashOps.entries(tokenKey);
 
+        // 토큰 없으면 빈 Map 이 옴 (null 아님)
         if (entries.isEmpty()) {
             return Optional.empty();
         }
 
+        // 깨진 레코드 자동 정리 향후 도입
         try {
+            // Hash 데이터로 QueueToken 객체 만들어서 반환
             return Optional.of(toQueueToken(id, entries));
         } catch (Exception e) {
             log.warn("깨진 Hash 레코드 발견. tokenId={}", id.asString(), e);
@@ -132,15 +137,26 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         return QueueToken.restore(id, userId, programId, issuedAt, status, entryToken);
     }
 
+    /**
+     * Redis 기반 findByUserIdAndProgramId 구현.
+     *
+     * <p>2단계 조회:
+     * <ol>
+     *   <li>역인덱스로 tokenId 조회</li>
+     *   <li>tokenId로 토큰 전체 조회 ({@link #findById} 재사용)</li>
+     * </ol>
+     */
     @Override
     public Optional<QueueToken> findByUserIdAndProgramId(UserId userId, ProgramId programId) {
         String userProgramKey = userProgramKey(userId, programId);
 
+        // 1단계: 역인덱스로 tokenId 조회
         String tokenIdStr = redisTemplate.opsForValue().get(userProgramKey);
         if (tokenIdStr == null) {
             return Optional.empty();
         }
 
+        // 2단계: tokenId로 토큰 전체 조회 (findById 재사용)
         return findById(QueueTokenId.fromString(tokenIdStr));
     }
 
@@ -173,23 +189,32 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     /**
      * Redis 기반 findPosition 구현.
      *
-     * <p>Redis ZRANK 는 0-based 이므로 사용자에게 보여줄 1-based 로 변환한다.
+     * <p>2단계 조회:
+     * <ol>
+     *   <li>역인덱스로 tokenId 조회</li>
+     *   <li>Sorted Set의 ZRANK로 순번 조회</li>
+     * </ol>
+     *
+     * <p>Redis ZRANK는 0-based이므로 사용자에게 보여줄 1-based로 변환한다.
      */
     @Override
     public Optional<Long> findPosition(UserId userId, ProgramId programId) {
         String userProgramKey = userProgramKey(userId, programId);
 
+        // 1단계: 역인덱스로 tokenId 조회
         String tokenIdStr = redisTemplate.opsForValue().get(userProgramKey);
         if (tokenIdStr == null) {
             return Optional.empty();
         }
 
+        // 2단계: Sorted Set에서 순번 조회 (0-based)
         String programKey = programKey(programId);
         Long rank = redisTemplate.opsForZSet().rank(programKey, tokenIdStr);
         if (rank == null) {
             return Optional.empty();
         }
 
+        // 3단계: 1-based로 변환하여 반환
         return Optional.of(rank + 1);
     }
 
@@ -205,15 +230,21 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         }
 
         String programKey = programKey(programId);
+
+        // 1단계: Sorted Set에서 앞에서부터 batchSize명의 tokenId 조회
         Set<String> tokenIds = redisTemplate.opsForZSet().range(programKey, 0, batchSize - 1);
 
         if (tokenIds == null || tokenIds.isEmpty()) {
             return List.of();
         }
 
+        // 2단계: 각 tokenId로 토큰 전체 조회
         return tokenIds.stream()
+            // String → Optional<QueueToken>
             .map(tokenIdStr -> findById(QueueTokenId.fromString(tokenIdStr)))
+            // 토큰 있는 것만
             .filter(Optional::isPresent)
+            // Optional<QueueToken> → QueueToken
             .map(Optional::get)
             .toList();
     }
@@ -221,7 +252,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     /**
      * Redis 기반 admit 구현.
      *
-     * <p>2 가지 작업을 트랜잭션으로 처리한다:
+     * <p>2가지 작업을 트랜잭션으로 처리한다:
      * <ol>
      *   <li>Sorted Set 에서 토큰 멤버 제거 (큐에서 빠짐 → position 조회 X)</li>
      *   <li>Hash 의 status / entryToken 업데이트</li>
@@ -244,7 +275,9 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
             @Override
             public List<Object> execute(RedisOperations operations) {
                 operations.multi();
+                // 1. Sorted Set 에서 멤버 제거 (큐에서 빠짐)
                 operations.opsForZSet().remove(programKey, tokenIdStr);
+                // 2. Hash 의 status / entryToken 업데이트
                 operations.opsForHash().putAll(tokenKey, updates);
                 return operations.exec();
             }
@@ -271,6 +304,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         String programIdStr = programId.asString();
         String seqKey = seqKey(programId);
 
+        // 1. SCAN 으로 모든 token Hash 키 찾기 (programId 일치하는 것)
         Set<String> tokenKeysToDelete = new HashSet<>();
         List<String> userProgramKeysToDelete = new ArrayList<>();
 
@@ -283,8 +317,10 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         for (String tokenKey : allTokenKeys) {
             String tokenProgramId = hashOps.get(tokenKey, FIELD_PROGRAM_ID);
             if (programIdStr.equals(tokenProgramId)) {
+                // 일치 → 삭제 대상
                 tokenKeysToDelete.add(tokenKey);
 
+                // 역인덱스 키도 만들기 위해 userId 조회
                 String userId = hashOps.get(tokenKey, FIELD_USER_ID);
                 if (userId != null) {
                     String userProgramKey = QUEUE_KEY_PREFIX + USER_KEY_PREFIX + userId
@@ -300,12 +336,14 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
             }
         }
 
+        // 2. 삭제 대상 모두 모음 (Sorted Set + Hash + 역인덱스)
         List<String> allKeysToDelete = new ArrayList<>();
         allKeysToDelete.add(programKey);       // Sorted Set
         allKeysToDelete.add(seqKey);           // 시퀀스 카운터
         allKeysToDelete.addAll(tokenKeysToDelete);
         allKeysToDelete.addAll(userProgramKeysToDelete);
 
+        // 3. 일괄 삭제
         Long deletedCount = redisTemplate.delete(allKeysToDelete);
 
         log.info("프로그램 토큰 삭제 완료. programId={}, 삭제 키 수={}",

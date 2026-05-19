@@ -55,6 +55,7 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     private final QueueProperties properties;
     private final DefaultRedisScript<Long> enqueueScript;
     private final DefaultRedisScript<Long> deleteScript;
+    private final DefaultRedisScript<Long> deleteAllByProgramScript;
 
     /**
      * Redis 기반 enqueue 구현 (Lua 스크립트로 원자 처리).
@@ -285,18 +286,17 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
     }
 
     /**
-     * Redis 기반 deleteAllByProgramId 구현.
+     * Redis 기반 deleteAllByProgramId 구현 (Lua 스크립트로 원자 처리).
      *
-     * <p>Program 취소 시 해당 프로그램의 모든 토큰 (대기 + 입장) 정리.
-     *
-     * <p>처리 단계:
+     * <p>Lua 스크립트 안에서:
      * <ol>
-     *   <li>SCAN 으로 모든 token Hash 키 ({@code queue:token:*}) 조회</li>
-     *   <li>각 Hash 의 programId 필드 확인하여 일치하는 토큰 식별</li>
-     *   <li>일치 토큰의 Hash + 역인덱스 + Sorted Set 자체 일괄 삭제</li>
+     *   <li>SCAN 으로 모든 token Hash 키 조회</li>
+     *   <li>programId 일치 토큰만 compare-and-delete (역인덱스 + Sorted Set + Hash)</li>
+     *   <li>Sorted Set 자체 + seqKey 일괄 삭제</li>
      * </ol>
      *
-     * <p>미래 개선: 프로그램별 토큰 ID Set 을 별도 유지하면 SCAN 불필요 + Lua 통합.</p>
+     * <p>역인덱스 삭제는 compare-and-delete 로 TOCTOU 방어:
+     * 동시에 새 토큰이 같은 사용자로 enqueue 되어도 새 토큰의 역인덱스는 보존.
      */
     @Override
     public void deleteAllByProgramId(ProgramId programId) {
@@ -304,50 +304,17 @@ public class RedisQueueTokenRepository implements QueueTokenRepository {
         String programIdStr = programId.asString();
         String seqKey = seqKey(programId);
 
-        // 1. SCAN 으로 모든 token Hash 키 찾기 (programId 일치하는 것)
-        Set<String> tokenKeysToDelete = new HashSet<>();
-        List<String> userProgramKeysToDelete = new ArrayList<>();
-
-        String tokenKeyPattern = QUEUE_KEY_PREFIX + TOKEN_KEY_PREFIX + "*";
-        Set<String> allTokenKeys = scanKeys(tokenKeyPattern);
-
-        HashOperations<String, String, String> hashOps = redisTemplate.opsForHash();
-        String tokenKeyPrefix = QUEUE_KEY_PREFIX + TOKEN_KEY_PREFIX;
-
-        for (String tokenKey : allTokenKeys) {
-            String tokenProgramId = hashOps.get(tokenKey, FIELD_PROGRAM_ID);
-            if (programIdStr.equals(tokenProgramId)) {
-                // 일치 → 삭제 대상
-                tokenKeysToDelete.add(tokenKey);
-
-                // 역인덱스 키도 만들기 위해 userId 조회
-                String userId = hashOps.get(tokenKey, FIELD_USER_ID);
-                if (userId != null) {
-                    String userProgramKey = QUEUE_KEY_PREFIX + USER_KEY_PREFIX + userId
-                        + ":" + PROGRAM_KEY_PREFIX + programIdStr;
-
-                    // 역인덱스가 이 토큰을 가리킬 때만 삭제 (동시성 방어)
-                    String tokenIdStr = tokenKey.substring(tokenKeyPrefix.length());
-                    String currentTokenIdInIndex = redisTemplate.opsForValue().get(userProgramKey);
-                    if (tokenIdStr.equals(currentTokenIdInIndex)) {
-                        userProgramKeysToDelete.add(userProgramKey);
-                    }
-                }
-            }
-        }
-
-        // 2. 삭제 대상 모두 모음 (Sorted Set + Hash + 역인덱스)
-        List<String> allKeysToDelete = new ArrayList<>();
-        allKeysToDelete.add(programKey);       // Sorted Set
-        allKeysToDelete.add(seqKey);           // 시퀀스 카운터
-        allKeysToDelete.addAll(tokenKeysToDelete);
-        allKeysToDelete.addAll(userProgramKeysToDelete);
-
-        // 3. 일괄 삭제
-        Long deletedCount = redisTemplate.delete(allKeysToDelete);
+        Long processedCount = redisTemplate.execute(
+            deleteAllByProgramScript,
+            List.of(programKey, seqKey),
+            programIdStr,
+            QUEUE_KEY_PREFIX + TOKEN_KEY_PREFIX,        // tokenKeyPrefix
+            QUEUE_KEY_PREFIX + USER_KEY_PREFIX,          // userProgramKeyPrefix
+            ":" + PROGRAM_KEY_PREFIX                     // programKeyInfix
+        );
 
         log.info("프로그램 토큰 삭제 완료. programId={}, 삭제 키 수={}",
-            programIdStr, deletedCount);
+            programIdStr, processedCount);
     }
 
     private Set<String> scanKeys(String pattern) {

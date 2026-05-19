@@ -46,7 +46,8 @@ end
 -- 2. tie-breaker score 생성 (epoch_milli * 1000000 + 시퀀스)
 local seq = redis.call('INCR', seqKey)
 redis.call('EXPIRE', seqKey, ttlSeconds)
-local score = issuedAtEpochMilli * 1000000 + seq
+local issuedAtEpochSecond = math.floor(issuedAtEpochMilli / 1000)
+local score = issuedAtEpochSecond * 1000000 + seq
 
 -- 3. Sorted Set 추가
 redis.call('ZADD', programKey, score, tokenId)

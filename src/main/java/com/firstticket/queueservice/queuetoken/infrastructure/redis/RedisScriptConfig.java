@@ -37,4 +37,16 @@ public class RedisScriptConfig {
         script.setResultType(Long.class);
         return script;
     }
+
+    /**
+     * deleteAllByProgram 원자 처리 스크립트
+     * 반환: Long
+     */
+    @Bean
+    public DefaultRedisScript<Long> deleteAllByProgramScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("lua/deleteAllByProgram.lua")));
+        script.setResultType(Long.class);
+        return script;
+    }
 }
